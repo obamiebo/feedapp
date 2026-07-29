@@ -51,7 +51,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec app np
 docker compose -f docker-compose.prod.yml --env-file .env.production exec app npm run prisma:seed:production
 ```
 
-The app is exposed on host port `8081`; Postgres is private to the Docker network. See `docs/deploy-ec2-docker.md` for EC2 setup, deploy, logs, and backup commands.
+The app is exposed on host port `18081`; Postgres is private to the Docker network. See `docs/deploy-ec2-docker.md` for EC2 setup, deploy, logs, and backup commands.
 
 Seeded demo users can sign in with the password `Password123!`. Local admin accounts include `admin@example.com` and `obamiebo@itconsortiumgh.com`.
 

@@ -2,7 +2,7 @@
 
 This internal beta deployment runs the Next.js app and Postgres with Docker Compose on one EC2 instance.
 
-The app is exposed on host port `8081` and Postgres is private to the Docker network.
+The app is exposed on host port `18081` and Postgres is private to the Docker network.
 
 ## EC2 Prerequisites
 
@@ -12,7 +12,7 @@ Allow inbound traffic for:
 
 - `22` from your admin IP for SSH
 - `80` and `443` if using a public domain and HTTPS reverse proxy
-- `8081` only temporarily for direct smoke testing, or only from trusted IPs
+- `18081` only temporarily for direct smoke testing, or only from trusted IPs
 
 Do not expose Postgres publicly.
 
@@ -57,7 +57,7 @@ This creates only `obamiebo@itconsortiumgh.com` as a provisioned platform Admin,
 Check health:
 
 ```bash
-curl http://localhost:8081/api/health
+curl http://localhost:18081/api/health
 ```
 
 ## Common Operations
@@ -104,4 +104,4 @@ Copy backups off the EC2 instance regularly.
 
 ## Reverse Proxy
 
-Put Nginx or Caddy in front of `localhost:8081` for HTTPS. The app container should stay on port `3000` internally; the host publishes it as `8081`.
+Put Nginx or Caddy in front of `localhost:18081` for HTTPS. The app container should stay on port `3000` internally; the host publishes it as `18081`.
