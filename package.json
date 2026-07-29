@@ -15,6 +15,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "node prisma/seed.mjs",
+    "prisma:seed:production": "node prisma/seed-production.mjs",
     "db:verify": "node prisma/verify-seed.mjs",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",

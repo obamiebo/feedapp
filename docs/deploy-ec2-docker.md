@@ -32,7 +32,7 @@ cp .env.production.example .env.production
 nano .env.production
 ```
 
-Set a long random `POSTGRES_PASSWORD`. Keep messaging providers as `stub` unless live delivery is intentional.
+Set a long random `POSTGRES_PASSWORD` and `SEED_ADMIN_TEMP_PASSWORD`. Keep messaging providers as `stub` unless live delivery is intentional.
 
 Build and start:
 
@@ -46,11 +46,13 @@ Run migrations:
 docker compose -f docker-compose.prod.yml --env-file .env.production exec app npx prisma migrate deploy
 ```
 
-For a beta environment only, seed demo data if needed:
+For the EC2 beta, seed only the platform admin and base roles:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production exec app npm run prisma:seed
+docker compose -f docker-compose.prod.yml --env-file .env.production exec app npm run prisma:seed:production
 ```
+
+This creates only `obamiebo@itconsortiumgh.com` as a provisioned platform Admin, plus the base role records. It does not create products, product groups, customers, cases, departments, SLA policies, or demo users.
 
 Check health:
 

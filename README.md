@@ -48,6 +48,7 @@ For EC2 internal beta hosting, use the production Docker files:
 cp .env.production.example .env.production
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 docker compose -f docker-compose.prod.yml --env-file .env.production exec app npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml --env-file .env.production exec app npm run prisma:seed:production
 ```
 
 The app is exposed on host port `8081`; Postgres is private to the Docker network. See `docs/deploy-ec2-docker.md` for EC2 setup, deploy, logs, and backup commands.
