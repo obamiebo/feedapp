@@ -1,0 +1,13 @@
+.env
+.env.*
+.next
+.next-verify
+node_modules
+npm-debug.log*
+Dockerfile
+docker-compose*.yml
+.git
+.gitignore
+tsconfig.tsbuildinfo
+coverage
+*.log

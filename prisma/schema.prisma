@@ -1,0 +1,345 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CaseStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MessageChannel {
+  EMAIL
+  SMS
+  INTERNAL_NOTE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MessageDeliveryStatus {
+  NOT_REQUIRED
+  ACCEPTED
+  SENT
+  FAILED
+}
+
+model User {
+  id               String             @id @default(cuid())
+  email            String             @unique
+  name             String
+  ssoSubject       String?            @unique
+  passwordHash     String?
+  passwordMustChange Boolean          @default(false)
+  lastLoginAt      DateTime?
+  provisioned      Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  memberships      DepartmentMember[]
+  roleAssignments  RoleAssignment[]
+  assignedCases    Case[]             @relation("CaseAssignee")
+  auditEvents      AuditLog[]
+  messageApprovals Approval[]         @relation("ApprovalApprover")
+  requestedApprovals Approval[]       @relation("ApprovalRequestedReviewer")
+  sessions         UserSession[]
+  productAccess    UserProductAccess[]
+  productGroupAccess UserProductGroupAccess[]
+}
+
+model UserSession {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  assignments RoleAssignment[]
+}
+
+model RoleAssignment {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+}
+
+model Department {
+  id          String             @id @default(cuid())
+  key         String             @unique
+  name        String
+  createdAt   DateTime           @default(now())
+  members     DepartmentMember[]
+  cases       Case[]
+  slaPolicies SlaPolicy[]
+}
+
+model DepartmentMember {
+  id           String     @id @default(cuid())
+  userId       String
+  departmentId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, departmentId])
+  @@index([departmentId])
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  externalId String?  @unique
+  name       String?
+  email      String?  @unique
+  phone      String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  cases      Case[]
+}
+
+model Case {
+  id                String             @id @default(cuid())
+  title             String
+  description       String
+  status            CaseStatus         @default(NEW)
+  priority          Priority           @default(MEDIUM)
+  sourceSystem      String
+  externalId        String?
+  dueAt             DateTime?
+  slaDeadlineAt     DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  customerId        String
+  departmentId      String
+  assigneeId        String?
+  customer          Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  department        Department         @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  assignee          User?              @relation("CaseAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  messages          Message[]
+  approvals         Approval[]
+  stages            CaseStage[]
+  auditLogs         AuditLog[]
+  integrationEvents IntegrationEvent[]
+  callbackAttempts  IntegrationCallbackAttempt[]
+
+  @@unique([sourceSystem, externalId])
+  @@index([status, priority])
+  @@index([departmentId, status])
+  @@index([assigneeId])
+  @@index([customerId])
+  @@index([sourceSystem])
+  @@index([slaDeadlineAt])
+}
+
+model CaseStage {
+  id                   String     @id @default(cuid())
+  caseId               String
+  status               CaseStatus
+  priority             Priority
+  startedAt            DateTime   @default(now())
+  endedAt              DateTime?
+  lastCustomerUpdateAt DateTime?
+  lastPromptReviewedAt DateTime?
+  followUpCount        Int        @default(0)
+  case                 Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, endedAt])
+  @@index([status, priority, endedAt, startedAt])
+}
+
+model Message {
+  id                String         @id @default(cuid())
+  caseId            String
+  channel           MessageChannel
+  direction         String
+  body              String
+  approvalStatus    ApprovalStatus @default(PENDING)
+  providerMessageId String?
+  deliveryStatus    MessageDeliveryStatus @default(NOT_REQUIRED)
+  deliveryAttempts  Int            @default(0)
+  deliveryError     String?
+  lastDeliveryAttemptAt DateTime?
+  createdAt         DateTime       @default(now())
+  case              Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([deliveryStatus])
+}
+
+model Approval {
+  id         String         @id @default(cuid())
+  caseId     String
+  approverId String?
+  requestedReviewerId String?
+  channel    MessageChannel @default(EMAIL)
+  status     ApprovalStatus @default(PENDING)
+  draftBody  String
+  decidedAt  DateTime?
+  createdAt  DateTime       @default(now())
+  case       Case           @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  approver   User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  requestedReviewer User?   @relation("ApprovalRequestedReviewer", fields: [requestedReviewerId], references: [id], onDelete: SetNull)
+
+  @@index([caseId])
+  @@index([approverId])
+  @@index([requestedReviewerId])
+}
+
+model SlaPolicy {
+  id                    String     @id @default(cuid())
+  departmentId          String
+  priority              Priority
+  responseTargetHours   Int
+  resolutionTargetHours Int
+  escalationTargetHours Int
+  department            Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, priority])
+}
+
+model MessagingCadencePolicy {
+  id              String     @id @default(cuid())
+  status          CaseStatus
+  priority        Priority
+  staleAfterHours Int
+  enabled         Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([status, priority])
+}
+
+model ProductGroup {
+  id          String                   @id @default(cuid())
+  key         String                   @unique
+  name        String
+  description String?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  sources     IntegrationSource[]
+  userAccess  UserProductGroupAccess[]
+}
+
+model IntegrationSource {
+  id         String             @id @default(cuid())
+  key        String             @unique
+  name       String
+  type       String
+  secretHash String?
+  enabled    Boolean            @default(true)
+  config     Json
+  lastSyncAt DateTime?
+  lastError  String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @default(now()) @updatedAt
+  groupId    String?
+  group      ProductGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  events     IntegrationEvent[]
+  callbackAttempts IntegrationCallbackAttempt[]
+  userAccess UserProductAccess[]
+
+  @@index([groupId])
+}
+
+model UserProductAccess {
+  id       String            @id @default(cuid())
+  userId   String
+  sourceId String
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source   IntegrationSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceId])
+  @@index([sourceId])
+}
+
+model UserProductGroupAccess {
+  id      String       @id @default(cuid())
+  userId  String
+  groupId String
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   ProductGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([groupId])
+}
+
+model IntegrationEvent {
+  id             String            @id @default(cuid())
+  sourceId       String
+  caseId         String?
+  externalId     String
+  idempotencyKey String            @unique
+  rawPayload     Json
+  status         String
+  createdAt      DateTime          @default(now())
+  source         IntegrationSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  case           Case?             @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([sourceId])
+  @@index([caseId])
+}
+
+model IntegrationCallbackAttempt {
+  id               String            @id @default(cuid())
+  sourceId         String
+  caseId           String
+  eventType        String
+  payload          Json
+  status           String            @default("QUEUED")
+  responseStatus   Int?
+  deliveryAttempts Int               @default(0)
+  lastError        String?
+  lastAttemptAt    DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  source           IntegrationSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  case             Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([caseId])
+  @@index([status, lastAttemptAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  caseId    String?
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  case      Case?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
+  @@index([actorId, createdAt])
+}

@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #f3f7fc;
+  --color-panel: #ffffff;
+  --color-panel-muted: #eef5fb;
+  --color-panel-subtle: #fbfdff;
+  --color-ink: #10213f;
+  --color-muted: #5f6f89;
+  --color-line: #aebdd0;
+  --color-brand: #244f89;
+  --color-brand-dark: #172f5f;
+  --color-brand-deep: #0d1f46;
+  --color-accent: #0b99d5;
+  --color-accent-dark: #087db0;
+  --color-critical: #b42318;
+  --color-critical-bg: #fee4e2;
+  --color-warning: #b54708;
+  --color-warning-bg: #fff1d6;
+  --color-info: #05678f;
+  --color-info-bg: #dff4ff;
+  --color-ok: #15803d;
+  --color-ok-bg: #e7f8ef;
+  --color-neutral-bg: #eef2f8;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-sm: 0 1px 2px rgb(16 33 63 / 4%);
+  --shadow-md: 0 10px 24px rgb(16 33 63 / 6%);
+  --shadow-lg: 0 20px 45px rgb(16 33 63 / 10%);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+/*
+ * These live in @layer base so Tailwind utility classes always win over
+ * them (per Tailwind's documented cascade-layer pattern), even though
+ * every page is now Tailwind-based and none of them collide in practice.
+ */
+@layer base {
+  body {
+    margin: 0;
+    background:
+      linear-gradient(180deg, #ffffff 0, var(--color-bg) 260px),
+      var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
