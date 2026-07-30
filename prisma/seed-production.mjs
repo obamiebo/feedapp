@@ -29,23 +29,38 @@ async function main() {
     });
   }
 
-  const admin = await prisma.user.upsert({
+  const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail },
-    update: {
-      name: adminName,
-      passwordHash,
-      passwordMustChange: true,
-      provisioned: true
-    },
-    create: {
-      id: "user-obamiebo-admin",
-      email: adminEmail,
-      name: adminName,
-      passwordHash,
-      passwordMustChange: true,
-      provisioned: true
+    select: {
+      id: true,
+      passwordHash: true
     }
   });
+
+  const admin = existingAdmin
+    ? await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: {
+          name: adminName,
+          provisioned: true,
+          ...(existingAdmin.passwordHash
+            ? {}
+            : {
+                passwordHash,
+                passwordMustChange: true
+              })
+        }
+      })
+    : await prisma.user.create({
+        data: {
+          id: "user-obamiebo-admin",
+          email: adminEmail,
+          name: adminName,
+          passwordHash,
+          passwordMustChange: true,
+          provisioned: true
+        }
+      });
 
   await prisma.roleAssignment.upsert({
     where: {
@@ -67,6 +82,8 @@ async function main() {
       action: "admin.production_seed_applied",
       metadata: {
         adminEmail,
+        existingUser: Boolean(existingAdmin),
+        temporaryPasswordApplied: !existingAdmin?.passwordHash,
         roles: roles.length
       }
     }

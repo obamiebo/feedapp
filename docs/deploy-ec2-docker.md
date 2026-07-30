@@ -34,6 +34,18 @@ nano .env.production
 
 Set a long random `POSTGRES_PASSWORD` and `SEED_ADMIN_TEMP_PASSWORD`. Keep messaging providers as `stub` unless live delivery is intentional.
 
+For direct HTTP beta testing on `http://<ec2-host>:18081`, keep:
+
+```bash
+SESSION_COOKIE_SECURE=false
+```
+
+When HTTPS is configured through Nginx or Caddy, change it to:
+
+```bash
+SESSION_COOKIE_SECURE=true
+```
+
 Build and start:
 
 ```bash
@@ -53,6 +65,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec app np
 ```
 
 This creates only `obamiebo@itconsortiumgh.com` as a provisioned platform Admin, plus the base role records. It does not create products, product groups, customers, cases, departments, SLA policies, or demo users.
+
+Do not rerun `prisma:seed:production` after activating the admin account unless you intend to reset that admin back to the temporary seed password.
 
 Check health:
 

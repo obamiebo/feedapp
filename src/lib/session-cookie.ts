@@ -1,6 +1,18 @@
 import { cookies } from "next/headers";
 import { sessionCookieName } from "@/services/auth";
 
+function secureSessionCookie() {
+  if (process.env.SESSION_COOKIE_SECURE === "false") {
+    return false;
+  }
+
+  if (process.env.SESSION_COOKIE_SECURE === "true") {
+    return true;
+  }
+
+  return process.env.NODE_ENV === "production";
+}
+
 export async function getSessionToken() {
   return (await cookies()).get(sessionCookieName)?.value;
 }
@@ -11,7 +23,7 @@ export async function setSessionCookie(token: string, expiresAt: Date) {
     httpOnly: true,
     path: "/",
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production"
+    secure: secureSessionCookie()
   });
 }
 
