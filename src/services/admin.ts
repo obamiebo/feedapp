@@ -5,6 +5,7 @@ import type { AppUser } from "@/domain/types";
 import { prisma } from "@/lib/db";
 import { canManageProductRoster } from "@/lib/access-control";
 import { hashIntegrationSecret } from "@/lib/integrations";
+import { normalizeKey } from "@/lib/keys";
 import { getProductCallbackConfig } from "@/repositories/integrations";
 import type { MessagingCadencePolicyRecord } from "@/repositories/messaging-cadence";
 import { createPrismaMessagingCadenceRepository } from "@/repositories/messaging-cadence";
@@ -227,14 +228,6 @@ export type UpdateSlaPolicyInput = {
   resolutionTargetHours: number;
   escalationTargetHours: number;
 };
-
-function normalizeKey(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 async function writeAuditLog(
   client: AuditWriter,

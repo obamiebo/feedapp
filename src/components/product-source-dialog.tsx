@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { KeyRound, Plus, UserPlus, X } from "lucide-react";
+import { KeyFields } from "@/components/ui/key-fields";
+import { PasswordInput } from "@/components/ui/password-input";
 import type { AdminProductGroup, AdminUser } from "@/services/admin";
 
 type ProductSourceDialogProps = {
@@ -46,14 +48,7 @@ export function ProductSourceDialog({ action, productGroups, productManagers }: 
           </button>
         </div>
         <form action={action} className="flex flex-col gap-3 p-5">
-          <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-source-name">
-            Name
-            <input id="product-source-name" name="name" minLength={2} required className={inputClass} />
-          </label>
-          <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-source-key">
-            Key
-            <input id="product-source-key" name="key" placeholder="Optional, generated from name" className={inputClass} />
-          </label>
+          <KeyFields inputClass={inputClass} nameId="product-source-name" keyId="product-source-key" />
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-source-type">
             Type
             <select id="product-source-type" name="type" defaultValue="api" className={inputClass}>
@@ -146,10 +141,9 @@ export function ProductSourceDialog({ action, productGroups, productManagers }: 
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="new-product-manager-password">
                   Temporary password
-                  <input
+                  <PasswordInput
                     id="new-product-manager-password"
                     name="newProductManagerTemporaryPassword"
-                    type="password"
                     minLength={10}
                     required={managerMode === "create"}
                     className={inputClass}

@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { UserPlus, X } from "lucide-react";
+import { PasswordInput } from "@/components/ui/password-input";
 import type { AdminProductGroup, AdminProductSource, AdminRole } from "@/services/admin";
 
 type AddRepDialogProps = {
@@ -55,11 +56,10 @@ export function AddRepDialog({ action, roles, productGroups, productSources }: A
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="temporary-password">
             Temporary password
-            <input
+            <PasswordInput
               id="temporary-password"
               minLength={10}
               name="temporaryPassword"
-              type="password"
               required
               className={inputClass}
             />

@@ -58,15 +58,15 @@ Run migrations:
 docker compose -f docker-compose.prod.yml --env-file .env.production exec app npx prisma migrate deploy
 ```
 
-For the EC2 beta, seed only the platform admin and base roles:
+For the EC2 beta, seed the base roles, baseline Support department, and platform admin:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production exec app npm run prisma:seed:production
 ```
 
-This creates only `obamiebo@itconsortiumgh.com` as a provisioned platform Admin, plus the base role records. It does not create products, product groups, customers, cases, departments, SLA policies, or demo users.
+This creates `obamiebo@itconsortiumgh.com` as a provisioned platform Admin, plus the base role records and a Support department for product intake routing. It does not create products, product groups, customers, cases, SLA policies, or demo users.
 
-Do not rerun `prisma:seed:production` after activating the admin account unless you intend to reset that admin back to the temporary seed password.
+Rerunning `prisma:seed:production` is safe after the admin account is activated; it preserves an existing admin password and activation state.
 
 Check health:
 

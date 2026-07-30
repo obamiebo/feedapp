@@ -2,6 +2,7 @@ import { LockKeyhole } from "lucide-react";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
+import { PasswordInput } from "@/components/ui/password-input";
 import { resolveCurrentUser } from "@/lib/current-user";
 import { setSessionCookie } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
@@ -58,11 +59,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="password">
             Password
-            <input
+            <PasswordInput
               autoComplete="current-password"
               id="password"
               name="password"
-              type="password"
               required
               className={inputClass}
             />

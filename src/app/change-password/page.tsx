@@ -2,6 +2,7 @@ import { LockKeyhole } from "lucide-react";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
+import { PasswordInput } from "@/components/ui/password-input";
 import { resolveCurrentUser } from "@/lib/current-user";
 import { createAuthService } from "@/services/auth";
 
@@ -79,35 +80,32 @@ export default async function ChangePasswordPage({
         <form action={changePasswordAction} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="currentPassword">
             Current password
-            <input
+            <PasswordInput
               autoComplete="current-password"
               id="currentPassword"
               name="currentPassword"
-              type="password"
               required
               className={inputClass}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="nextPassword">
             New password
-            <input
+            <PasswordInput
               autoComplete="new-password"
               id="nextPassword"
               minLength={10}
               name="nextPassword"
-              type="password"
               required
               className={inputClass}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="confirmPassword">
             Confirm new password
-            <input
+            <PasswordInput
               autoComplete="new-password"
               id="confirmPassword"
               minLength={10}
               name="confirmPassword"
-              type="password"
               required
               className={inputClass}
             />

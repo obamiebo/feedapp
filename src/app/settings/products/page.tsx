@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/empty-state";
 import { ProductSourceDialog } from "@/components/product-source-dialog";
 import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
 import { DataTable } from "@/components/ui/data-table";
+import { KeyFields } from "@/components/ui/key-fields";
+import { PasswordInput } from "@/components/ui/password-input";
 import type { AdminProductGroup, AdminProductSource, ProductRosterMember } from "@/services/admin";
 import { canManageAdmin, canManageAnyProductRoster } from "@/lib/access-control";
 import { resolveCurrentUser } from "@/lib/current-user";
@@ -72,10 +74,21 @@ async function createProductSourceAction(formData: FormData) {
           userId: initialProductManagerId
         };
 
-  const result = await createAdminService().createProductSource(
-    { key, name, type, groupId, enabled: checkboxValue(formData, "enabled"), initialProductManager },
-    currentUser.id
-  );
+  let result: { key: string; secret: string };
+
+  try {
+    result = await createAdminService().createProductSource(
+      { key, name, type, groupId, enabled: checkboxValue(formData, "enabled"), initialProductManager },
+      currentUser.id
+    );
+  } catch (error) {
+    const productError =
+      error instanceof Error && error.message === "A legacy routing department is required before creating product sources"
+        ? "missing-department"
+        : "create-failed";
+    redirect(`/settings/products?productError=${productError}`);
+  }
+
   revalidatePath("/settings/products");
   redirect(
     `/settings/products?newProductKey=${encodeURIComponent(result.key)}&newProductSecret=${encodeURIComponent(result.secret)}`
@@ -232,6 +245,9 @@ export default async function SettingsProductsPage({
   const rosterError = Array.isArray(resolvedSearchParams.rosterError)
     ? resolvedSearchParams.rosterError[0]
     : resolvedSearchParams.rosterError;
+  const productError = Array.isArray(resolvedSearchParams.productError)
+    ? resolvedSearchParams.productError[0]
+    : resolvedSearchParams.productError;
 
   const adminService = createAdminService();
   const [directory, rosterDirectory] = await Promise.all([
@@ -257,6 +273,12 @@ export default async function SettingsProductsPage({
         : rosterError === "add-failed"
           ? "The rep could not be added to this product."
           : null;
+  const productErrorMessage =
+    productError === "missing-department"
+      ? "Create a department before adding products. Production seed now creates Support by default."
+      : productError === "create-failed"
+        ? "The product could not be created. Check the product details and try again."
+        : null;
 
   const rosterSection = (
     <section className="rounded-lg border border-line bg-panel shadow-sm">
@@ -373,6 +395,11 @@ export default async function SettingsProductsPage({
             <Boxes size={18} className="text-muted" aria-hidden="true" />
             <h2 className="text-sm font-semibold text-ink">Product sources</h2>
           </div>
+          {productErrorMessage ? (
+            <div className="mx-5 mt-4 rounded-md border border-critical/30 bg-critical-bg px-3 py-2 text-sm text-critical">
+              {productErrorMessage}
+            </div>
+          ) : null}
           {newProductKey && newProductSecret ? (
             <div className="mx-5 mt-4 flex flex-col gap-1 rounded-md border border-warning-bg bg-warning-bg p-4 text-sm">
               <strong className="text-warning">Secret generated for {newProductKey}</strong>
@@ -457,25 +484,7 @@ export default async function SettingsProductsPage({
             <h2 className="text-sm font-semibold text-ink">Add product group</h2>
           </div>
           <form action={createProductGroupAction} className="flex flex-col gap-3 p-5">
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-group-name">
-              Name
-              <input
-                id="product-group-name"
-                name="name"
-                minLength={2}
-                required
-                className={inputClass}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-group-key">
-              Key
-              <input
-                id="product-group-key"
-                name="key"
-                placeholder="Optional, generated from name"
-                className={inputClass}
-              />
-            </label>
+            <KeyFields inputClass={inputClass} nameId="product-group-name" keyId="product-group-key" />
             <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-group-description">
               Description
               <input
@@ -614,10 +623,9 @@ export default async function SettingsProductsPage({
             </label>
             <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="callback-secret">
               Signing secret
-              <input
+              <PasswordInput
                 id="callback-secret"
                 name="callbackSecret"
-                type="password"
                 placeholder="Shared callback signing secret"
                 className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
               />

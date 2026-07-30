@@ -3,7 +3,8 @@ import type { AppUser } from "@/domain/types";
 import { verifyPassword } from "@/services/auth";
 import { createAdminService } from "@/services/admin";
 
-function makeClient() {
+function makeClient(options: { hasDepartment?: boolean } = {}) {
+  const hasDepartment = options.hasDepartment ?? true;
   const auditLogs: Array<{ action: string; metadata?: unknown }> = [];
   const createdDepartments: Array<{ key: string; name: string }> = [];
   const createdProductSources: Array<unknown> = [];
@@ -60,11 +61,13 @@ function makeClient() {
         };
       },
       async findFirst() {
-        return {
-          id: "dept-default",
-          key: "support",
-          name: "Support"
-        };
+        return hasDepartment
+          ? {
+              id: "dept-default",
+              key: "support",
+              name: "Support"
+            }
+          : null;
       },
       async findMany() {
         return [
@@ -371,6 +374,29 @@ describe("admin service", () => {
         })
       })
     ]);
+  });
+
+  it("requires a routing department before creating product sources", async () => {
+    const { client, createdProductSources, productAccessCreates } = makeClient({ hasDepartment: false });
+
+    await expect(
+      createAdminService(client as never).createProductSource(
+        {
+          key: "",
+          name: "Commerce Platform",
+          type: "api",
+          enabled: true,
+          initialProductManager: {
+            mode: "existing",
+            userId: "user-pm"
+          }
+        },
+        "user-admin"
+      )
+    ).rejects.toThrow("A legacy routing department is required before creating product sources");
+
+    expect(createdProductSources).toEqual([]);
+    expect(productAccessCreates).toEqual([]);
   });
 
   it("creates product sources with a new initial product manager", async () => {

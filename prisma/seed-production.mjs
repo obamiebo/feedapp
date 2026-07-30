@@ -10,6 +10,12 @@ const roles = [
   ["department-user", "Product User", "Works on cases for products they can access."]
 ];
 
+const baselineDepartment = {
+  id: "dept-support",
+  key: "support",
+  name: "Support"
+};
+
 const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase() || "obamiebo@itconsortiumgh.com";
 const adminName = process.env.SEED_ADMIN_NAME?.trim() || "Obamiebo Admin";
 const temporaryPassword = process.env.SEED_ADMIN_TEMP_PASSWORD;
@@ -28,6 +34,12 @@ async function main() {
       create: { id, name, description }
     });
   }
+
+  await prisma.department.upsert({
+    where: { key: baselineDepartment.key },
+    update: { name: baselineDepartment.name },
+    create: baselineDepartment
+  });
 
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail },
@@ -84,6 +96,7 @@ async function main() {
         adminEmail,
         existingUser: Boolean(existingAdmin),
         temporaryPasswordApplied: !existingAdmin?.passwordHash,
+        baselineDepartmentKey: baselineDepartment.key,
         roles: roles.length
       }
     }
