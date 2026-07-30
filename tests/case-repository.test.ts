@@ -129,4 +129,75 @@ describe("case repository", () => {
       id: "__no_visible_cases__"
     }]);
   });
+
+  it("lists product reports scoped to one authenticated source", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "case-1",
+        externalId: "COM-9001",
+        title: "Checkout failed",
+        description: "Customer cannot complete checkout.",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        createdAt: new Date("2026-07-30T08:00:00.000Z"),
+        updatedAt: new Date("2026-07-30T09:00:00.000Z"),
+        customer: {
+          externalId: "customer-9001",
+          name: "Afi Mensah",
+          email: "afi@example.com",
+          phone: null
+        }
+      }
+    ]);
+    const repository = createPrismaCaseRepository({
+      case: {
+        findMany
+      }
+    } as never);
+
+    const page = await repository.listProductReports({
+      sourceSystem: "commerce-platform",
+      customerID: "customer-9001",
+      status: "IN_PROGRESS",
+      from: new Date("2026-07-01T00:00:00.000Z"),
+      to: new Date("2026-07-30T23:59:59.999Z"),
+      limit: 25,
+      cursor: "case-cursor"
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          sourceSystem: "commerce-platform",
+          customer: { externalId: "customer-9001" },
+          status: "IN_PROGRESS",
+          createdAt: {
+            gte: new Date("2026-07-01T00:00:00.000Z"),
+            lte: new Date("2026-07-30T23:59:59.999Z")
+          }
+        },
+        cursor: { id: "case-cursor" },
+        skip: 1,
+        take: 26
+      })
+    );
+    expect(page).toEqual({
+      reports: [
+        {
+          caseID: "COM-9001",
+          customerID: "customer-9001",
+          title: "Checkout failed",
+          description: "Customer cannot complete checkout.",
+          status: "IN_PROGRESS",
+          priority: "High",
+          customerName: "Afi Mensah",
+          customerEmail: "afi@example.com",
+          customerPhone: null,
+          createdAt: new Date("2026-07-30T08:00:00.000Z"),
+          updatedAt: new Date("2026-07-30T09:00:00.000Z")
+        }
+      ],
+      nextCursor: null
+    });
+  });
 });

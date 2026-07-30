@@ -129,6 +129,7 @@ export type AdminProductsDirectory = {
 };
 
 export type AdminTeamDirectory = {
+  departments: AdminDepartment[];
   users: AdminUser[];
   roles: AdminRole[];
   productGroups: AdminProductGroup[];
@@ -394,6 +395,7 @@ export type AdminService = {
   getSlaDirectory(): Promise<AdminSlaDirectory>;
   getProductRosterDirectory(actor: AppUser, sourceId?: string): Promise<ProductRosterDirectory>;
   createDepartment(input: CreateDepartmentInput, actorId?: string): Promise<void>;
+  deleteDepartment(departmentId: string, actorId?: string): Promise<void>;
   createProductGroup(input: CreateProductGroupInput, actorId?: string): Promise<void>;
   createProductSource(input: CreateProductSourceInput, actorId?: string): Promise<ProductSecretResult>;
   updateProductSource(input: UpdateProductSourceInput, actorId?: string): Promise<void>;
@@ -432,14 +434,15 @@ export function createAdminService(client: PrismaClient = prisma): AdminService 
     },
 
     async getTeamDirectory() {
-      const [users, roles, productGroups, productSources] = await Promise.all([
+      const [departments, users, roles, productGroups, productSources] = await Promise.all([
+        fetchDepartments(client),
         fetchUsersWithAccess(client),
         fetchRoles(client),
         fetchProductGroups(client),
         fetchProductSources(client)
       ]);
 
-      return { users, roles, productGroups, productSources };
+      return { departments, users, roles, productGroups, productSources };
     },
 
     async getScopedTeamDirectory(actor) {
@@ -666,6 +669,42 @@ export function createAdminService(client: PrismaClient = prisma): AdminService 
       await writeAuditLog(client, {
         actorId,
         action: "admin.department_created",
+        metadata: {
+          departmentId: department.id,
+          key: department.key,
+          name: department.name
+        }
+      });
+    },
+
+    async deleteDepartment(departmentId, actorId) {
+      const department = await client.department.findUnique({
+        where: { id: departmentId },
+        include: {
+          _count: {
+            select: {
+              cases: true,
+              members: true
+            }
+          }
+        }
+      });
+
+      if (!department) {
+        throw new Error("Department was not found");
+      }
+
+      if (department._count.cases > 0 || department._count.members > 0) {
+        throw new Error("Department must have no members or cases before deletion");
+      }
+
+      await client.department.delete({
+        where: { id: departmentId }
+      });
+
+      await writeAuditLog(client, {
+        actorId,
+        action: "admin.department_deleted",
         metadata: {
           departmentId: department.id,
           key: department.key,

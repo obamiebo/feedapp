@@ -2,18 +2,21 @@
 
 import { useRef } from "react";
 import { ShieldCheck, X } from "lucide-react";
-import type { AdminProductGroup, AdminProductSource, AdminRole, AdminUser } from "@/services/admin";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import type { AdminDepartment, AdminProductGroup, AdminProductSource, AdminRole, AdminUser } from "@/services/admin";
 
 type AccessGrantDialogProps = {
   action: (formData: FormData) => void | Promise<void>;
   user: AdminUser;
+  departments: AdminDepartment[];
   roles: AdminRole[];
   productGroups: AdminProductGroup[];
   productSources: AdminProductSource[];
 };
 
-export function AccessGrantDialog({ action, user, roles, productGroups, productSources }: AccessGrantDialogProps) {
+export function AccessGrantDialog({ action, user, departments, roles, productGroups, productSources }: AccessGrantDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const userDepartmentIds = new Set(user.departments.map((department) => department.id));
   const userRoleIds = new Set(user.roles.map((role) => role.id));
   const userProductGroupIds = new Set(user.productGroups.map((group) => group.id));
   const userProductSourceIds = new Set(user.productSources.map((source) => source.id));
@@ -62,6 +65,21 @@ export function AccessGrantDialog({ action, user, roles, productGroups, productS
             />
             Provisioned
           </label>
+          <fieldset className="flex flex-col gap-1.5 rounded-md border border-line p-3">
+            <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Departments</legend>
+            {departments.map((department) => (
+              <label className="flex items-center gap-1.5 text-sm text-muted" key={department.id}>
+                <input
+                  name="departmentIds"
+                  type="checkbox"
+                  value={department.id}
+                  defaultChecked={userDepartmentIds.has(department.id)}
+                  className="size-4 rounded border-line accent-brand"
+                />
+                {department.name}
+              </label>
+            ))}
+          </fieldset>
           <fieldset className="flex flex-col gap-1.5 rounded-md border border-line p-3">
             <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Roles</legend>
             {roles.map((role) => (
@@ -115,12 +133,13 @@ export function AccessGrantDialog({ action, user, roles, productGroups, productS
             >
               Cancel
             </button>
-            <button
+            <ConfirmSubmitButton
               className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              type="submit"
+              confirmMessage={`Save access changes for ${user.name}?`}
+              pendingChildren="Saving..."
             >
               Save grants
-            </button>
+            </ConfirmSubmitButton>
           </div>
         </form>
       </dialog>

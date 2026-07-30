@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { KeyRound, Plus, UserPlus, X } from "lucide-react";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { KeyFields } from "@/components/ui/key-fields";
 import { PasswordInput } from "@/components/ui/password-input";
 import type { AdminProductGroup, AdminUser } from "@/services/admin";
@@ -164,13 +165,14 @@ export function ProductSourceDialog({ action, productGroups, productManagers }: 
             >
               Cancel
             </button>
-            <button
+            <ConfirmSubmitButton
               className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-muted"
+              confirmMessage="Create this product source?"
               disabled={managerMode === "existing" && !hasProductManagers}
-              type="submit"
+              pendingChildren="Creating..."
             >
               Create source
-            </button>
+            </ConfirmSubmitButton>
           </div>
         </form>
       </dialog>

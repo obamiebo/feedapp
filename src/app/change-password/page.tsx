@@ -1,9 +1,12 @@
 import { LockKeyhole } from "lucide-react";
 import Image from "next/image";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PasswordInput } from "@/components/ui/password-input";
+import { PendingSubmitButton } from "@/components/ui/pending-submit-button";
 import { resolveCurrentUser } from "@/lib/current-user";
+import { getSessionToken, setSessionCookie } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +27,24 @@ async function changePasswordAction(formData: FormData) {
     redirect("/change-password?error=mismatch");
   }
 
+  const authService = createAuthService();
+
   try {
-    await createAuthService().changePassword(currentUser.id, currentPassword, nextPassword);
+    await authService.changePassword(currentUser.id, currentPassword, nextPassword);
   } catch {
     redirect("/change-password?error=invalid");
   }
+
+  const currentToken = await getSessionToken();
+
+  if (currentToken) {
+    await authService.revokeSession(currentToken);
+  }
+
+  const nextSession = await authService.createSession(currentUser.id);
+  await setSessionCookie(nextSession.token, nextSession.expiresAt);
+  revalidatePath("/", "layout");
+  revalidatePath("/change-password");
 
   redirect("/");
 }
@@ -110,12 +126,12 @@ export default async function ChangePasswordPage({
               className={inputClass}
             />
           </label>
-          <button
-            className="mt-1 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-            type="submit"
+          <PendingSubmitButton
+            className="mt-1 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-wait disabled:opacity-80"
+            pendingChildren={isTemporaryPassword ? "Activating..." : "Saving..."}
           >
             {isTemporaryPassword ? "Activate account" : "Save password"}
-          </button>
+          </PendingSubmitButton>
         </form>
         <div className="flex items-center justify-center gap-1.5 border-t border-line pt-4">
           <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Powered by</span>

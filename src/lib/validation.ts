@@ -23,20 +23,27 @@ export const createManualCaseSchema = z.object({
 });
 
 export const ingestionReportSchema = z.object({
-  sourceSystem: z.string().min(1),
-  externalId: z.string().min(1),
+  caseID: z.string().min(1),
+  customerID: z.string().min(1),
   title: z.string().min(3),
   description: z.string().min(3),
   priority: z.enum(priorities),
   departmentKey: z.string().min(1).optional(),
-  customer: z.object({
-    externalId: z.string().optional(),
-    name: z.string().optional(),
-    email: z.string().email().optional(),
-    phone: z.string().optional()
-  }),
+  customerName: z.string().min(1).optional(),
+  customerEmail: z.string().email().optional(),
+  customerPhone: z.string().optional(),
   reportedAt: z.string().datetime().optional(),
   rawPayload: z.unknown().optional()
+});
+
+export const ingestionReportQuerySchema = z.object({
+  caseID: z.string().min(1).optional(),
+  customerID: z.string().min(1).optional(),
+  status: z.enum(["NEW", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REOPENED"]).optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).optional()
 });
 
 export const statusUpdateSchema = z.object({

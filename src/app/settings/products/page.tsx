@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { ProductSourceDialog } from "@/components/product-source-dialog";
 import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DataTable } from "@/components/ui/data-table";
 import { KeyFields } from "@/components/ui/key-fields";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -350,9 +351,13 @@ export default async function SettingsProductsPage({
                       <form action={removeProductRosterUserAction}>
                         <input name="sourceId" type="hidden" value={rosterDirectory.selectedSource?.id} />
                         <input name="userId" type="hidden" value={member.id} />
-                        <button className="inline-flex items-center gap-1 text-sm font-medium text-critical" type="submit">
+                        <ConfirmSubmitButton
+                          className="inline-flex items-center gap-1 text-sm font-medium text-critical"
+                          confirmMessage={`Remove ${member.name} from this product?`}
+                          pendingChildren="Removing..."
+                        >
                           <XCircle size={14} /> Remove
-                        </button>
+                        </ConfirmSubmitButton>
                       </form>
                     ) : (
                       <span className="text-xs text-muted">Managed by group</span>
@@ -372,9 +377,13 @@ export default async function SettingsProductsPage({
               Add existing rep by email
               <input id="rep-email" name="email" type="email" required className={inputClass} />
             </label>
-            <button className={`${primaryButtonClass} self-end`} type="submit">
+            <ConfirmSubmitButton
+              className={`${primaryButtonClass} self-end`}
+              confirmMessage="Add this rep to the product?"
+              pendingChildren="Adding..."
+            >
               <UserPlus size={15} /> Add rep
-            </button>
+            </ConfirmSubmitButton>
           </form>
         </div>
       ) : (
@@ -493,12 +502,13 @@ export default async function SettingsProductsPage({
                 className={inputClass}
               />
             </label>
-            <button
+            <ConfirmSubmitButton
               className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              type="submit"
+              confirmMessage="Create this product group?"
+              pendingChildren="Creating..."
             >
               Create group
-            </button>
+            </ConfirmSubmitButton>
           </form>
         </section>
 
@@ -566,12 +576,13 @@ export default async function SettingsProductsPage({
               <input name="enabled" type="checkbox" defaultChecked className="size-4 rounded border-line accent-brand" />
               Enabled
             </label>
-            <button
+            <ConfirmSubmitButton
               className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              type="submit"
+              confirmMessage="Save changes to this product source?"
+              pendingChildren="Saving..."
             >
               Save source
-            </button>
+            </ConfirmSubmitButton>
           </form>
           <form action={rotateProductSourceSecretAction} className="flex flex-col gap-3 border-t border-line p-5">
             <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="rotate-source">
@@ -589,12 +600,13 @@ export default async function SettingsProductsPage({
                 ))}
               </select>
             </label>
-            <button
+            <ConfirmSubmitButton
               className="inline-flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-              type="submit"
+              confirmMessage="Rotate this source secret? Existing integrations using the old secret will stop working."
+              pendingChildren="Rotating..."
             >
               <RefreshCw size={15} /> Rotate secret
-            </button>
+            </ConfirmSubmitButton>
           </form>
           <form action={updateProductSourceCallbackAction} className="flex flex-col gap-3 border-t border-line p-5">
             <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="callback-source">
@@ -631,12 +643,13 @@ export default async function SettingsProductsPage({
               />
             </label>
             <p className="text-xs text-muted">Leave URL and secret blank to disable callbacks for the selected source.</p>
-            <button
+            <ConfirmSubmitButton
               className="inline-flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-              type="submit"
+              confirmMessage="Save callback settings for this product source?"
+              pendingChildren="Saving..."
             >
               Save callback
-            </button>
+            </ConfirmSubmitButton>
           </form>
         </section>
       </div>

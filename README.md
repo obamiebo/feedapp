@@ -90,7 +90,7 @@ The TFSG SMS adapter posts JSON with `api_key`, `merchant_id`, `message`, and `r
 
 To send through a generic HTTP gateway, set `EMAIL_PROVIDER="http"` or `SMS_PROVIDER="http"` and provide the matching `*_HTTP_ENDPOINT`. The app posts JSON with `caseId`, `channel`, `recipient`, and `body`, and accepts a JSON response with optional `providerMessageId` or `id`, plus optional `status` of `queued`, `sent`, or `failed`.
 
-Example report submission:
+Example product report submission:
 
 ```bash
 curl -X POST http://localhost:3000/api/ingestion/reports \
@@ -98,18 +98,25 @@ curl -X POST http://localhost:3000/api/ingestion/reports \
   -H 'x-feedback-source: commerce-platform' \
   -H 'x-feedback-secret: commerce-secret-123' \
   -d '{
-    "sourceSystem": "commerce-platform",
-    "externalId": "COM-DEMO-1001",
+    "caseID": "COM-DEMO-1001",
+    "customerID": "cust-demo-1001",
     "title": "Checkout failed",
     "description": "Customer cannot complete checkout from the product form.",
     "priority": "High",
-    "customer": {
-      "externalId": "cust-demo-1001",
-      "name": "Demo Customer",
-      "email": "demo.customer@example.com"
-    }
+    "customerName": "Demo Customer",
+    "customerEmail": "demo.customer@example.com"
   }'
 ```
+
+Product teams can query their own submitted reports with the same source headers:
+
+```bash
+curl 'http://localhost:3000/api/ingestion/reports?status=IN_PROGRESS&customerID=cust-demo-1001&limit=50' \
+  -H 'x-feedback-source: commerce-platform' \
+  -H 'x-feedback-secret: commerce-secret-123'
+```
+
+Supported filters are `caseID`, `customerID`, `status`, `from`, `to`, `limit`, and `cursor`. Status values are `NEW`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`, and `REOPENED`.
 
 ## Architecture Direction
 

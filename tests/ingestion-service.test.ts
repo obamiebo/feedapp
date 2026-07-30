@@ -15,17 +15,14 @@ const source = {
 };
 
 const report = {
-  sourceSystem: "commerce-platform",
-  externalId: "COM-9001",
+  caseID: "COM-9001",
+  customerID: "customer-9001",
   title: "Checkout failed",
   description: "Customer cannot complete checkout.",
   priority: "High" as const,
   departmentKey: "finance",
-  customer: {
-    externalId: "customer-9001",
-    name: "Afi Mensah",
-    email: "afi@example.com"
-  }
+  customerName: "Afi Mensah",
+  customerEmail: "afi@example.com"
 };
 
 function makeCase(overrides: Partial<FeedbackCase> = {}): FeedbackCase {
@@ -53,7 +50,7 @@ function makeService() {
   const createEvent = vi.fn().mockResolvedValue({
     id: "event-1",
     caseId: "case-created",
-    externalId: report.externalId,
+    externalId: report.caseID,
     idempotencyKey: "commerce-platform:COM-9001",
     status: "accepted"
   });
@@ -134,7 +131,12 @@ describe("ingestion service", () => {
         sourceSystem: "commerce-platform",
         externalId: "COM-9001",
         departmentId: "dept-finance",
-        customer: report.customer
+        customer: {
+          externalId: "customer-9001",
+          name: "Afi Mensah",
+          email: "afi@example.com",
+          phone: undefined
+        }
       }),
       undefined
     );

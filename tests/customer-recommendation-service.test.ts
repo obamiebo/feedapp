@@ -73,6 +73,9 @@ function makeCaseRepository(feedbackCase = makeCase()): CaseRepository {
     async listCasesPage() {
       return { items: [], total: 0, page: 1, pageSize: 10, pageCount: 1 };
     },
+    async listProductReports() {
+      return { reports: [], nextCursor: null };
+    },
     async getCaseStats() {
       return {
         byStatus: { New: 0, Assigned: 0, "In Progress": 0, Resolved: 0, Closed: 0, Reopened: 0 },

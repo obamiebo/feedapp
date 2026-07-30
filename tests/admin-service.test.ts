@@ -7,6 +7,7 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
   const hasDepartment = options.hasDepartment ?? true;
   const auditLogs: Array<{ action: string; metadata?: unknown }> = [];
   const createdDepartments: Array<{ key: string; name: string }> = [];
+  const deletedDepartments: unknown[] = [];
   const createdProductSources: Array<unknown> = [];
   const createdUsers: Array<unknown> = [];
   const roleDeletes: unknown[] = [];
@@ -81,6 +82,36 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
             }
           }
         ];
+      },
+      async findUnique({ where }: { where: { id: string } }) {
+        if (where.id === "dept-empty") {
+          return {
+            id: "dept-empty",
+            key: "empty",
+            name: "Empty",
+            _count: {
+              cases: 0,
+              members: 0
+            }
+          };
+        }
+
+        if (where.id === "dept-default") {
+          return {
+            id: "dept-default",
+            key: "support",
+            name: "Support",
+            _count: {
+              cases: 2,
+              members: 3
+            }
+          };
+        }
+
+        return null;
+      },
+      async delete(input: unknown) {
+        deletedDepartments.push(input);
       }
     },
     user: {
@@ -140,9 +171,45 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
         }
 
         return null;
+      },
+      async findMany() {
+        return [
+          {
+            id: "source-commerce-platform",
+            key: "commerce-platform",
+            name: "Commerce Platform",
+            type: "api",
+            enabled: true,
+            groupId: "group-commerce",
+            lastSyncAt: null,
+            lastError: null,
+            secretHash: "secret-hash",
+            config: {},
+            _count: { events: 0 }
+          }
+        ];
+      }
+    },
+    productGroup: {
+      async findMany() {
+        return [
+          {
+            id: "group-commerce",
+            key: "commerce",
+            name: "Commerce",
+            description: "Commerce products",
+            _count: { sources: 1 }
+          }
+        ];
       }
     },
     role: {
+      async findMany() {
+        return [
+          { id: "customer-service", name: "Customer Service" },
+          { id: "product-manager", name: "Product Manager" }
+        ];
+      },
       async findUnique({ where }: { where: { name: string } }) {
         if (where.name === "Product Manager") {
           return {
@@ -246,6 +313,7 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
     auditLogs,
     client,
     createdDepartments,
+    deletedDepartments,
     createdProductSources,
     createdUsers,
     cadenceUpserts,
@@ -297,6 +365,37 @@ describe("admin service", () => {
         })
       })
     ]);
+  });
+
+  it("deletes empty departments and writes audit logs", async () => {
+    const { auditLogs, client, deletedDepartments } = makeClient();
+
+    await createAdminService(client as never).deleteDepartment("dept-empty", "user-admin");
+
+    expect(deletedDepartments).toEqual([
+      {
+        where: { id: "dept-empty" }
+      }
+    ]);
+    expect(auditLogs).toEqual([
+      expect.objectContaining({
+        action: "admin.department_deleted",
+        metadata: expect.objectContaining({
+          departmentId: "dept-empty",
+          key: "empty"
+        })
+      })
+    ]);
+  });
+
+  it("blocks deleting departments with members or cases", async () => {
+    const { client, deletedDepartments } = makeClient();
+
+    await expect(createAdminService(client as never).deleteDepartment("dept-default", "user-admin")).rejects.toThrow(
+      "Department must have no members or cases before deletion"
+    );
+
+    expect(deletedDepartments).toEqual([]);
   });
 
   it("creates users with roles, departments, and audit logs", async () => {
@@ -516,6 +615,22 @@ describe("admin service", () => {
       })
     ]);
     expect(auditLogs).toEqual([expect.objectContaining({ action: "admin.user_access_updated" })]);
+  });
+
+  it("includes departments in the team directory for access management", async () => {
+    const { client } = makeClient();
+
+    const directory = await createAdminService(client as never).getTeamDirectory();
+
+    expect(directory.departments).toEqual([
+      expect.objectContaining({
+        id: "dept-default",
+        key: "support",
+        name: "Support",
+        memberCount: 3,
+        caseCount: 2
+      })
+    ]);
   });
 
   it("updates messaging cadence policies and writes audit logs", async () => {

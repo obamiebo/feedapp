@@ -102,6 +102,25 @@ describe("auth service", () => {
     await expect(verifyPassword(user.passwordHash, "Permanent1!")).resolves.toBe(true);
   });
 
+  it("supports rotating the session after a password change", async () => {
+    const { client, user } = makeClient();
+    const service = createAuthService(client as never);
+    user.passwordHash = await hashPassword("Temporary1!");
+    const oldSession = await service.createSession("user-admin");
+
+    await service.changePassword("user-admin", "Temporary1!", "Permanent1!");
+    await service.revokeSession(oldSession.token);
+    const nextSession = await service.createSession("user-admin");
+
+    await expect(service.getUserForSession(oldSession.token)).resolves.toBeNull();
+    await expect(service.getUserForSession(nextSession.token)).resolves.toEqual(
+      expect.objectContaining({
+        id: "user-admin",
+        passwordMustChange: false
+      })
+    );
+  });
+
   it("rejects reusing the temporary password as the new password", async () => {
     const { client, user } = makeClient();
     const service = createAuthService(client as never);

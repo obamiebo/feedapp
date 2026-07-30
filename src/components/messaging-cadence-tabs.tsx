@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { priorities } from "@/domain/constants";
 import type { CaseStatus, Priority } from "@/domain/types";
 import { StatusBadge, priorityTone } from "@/components/status-badge";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { Tabs } from "@/components/ui/tabs";
 import { DataTable } from "@/components/ui/data-table";
 import { Clock } from "lucide-react";
@@ -68,12 +69,13 @@ export function MessagingCadenceTabs({ action, initialPriority, policies }: Mess
                       />
                       Prompt enabled
                     </label>
-                    <button
+                    <ConfirmSubmitButton
                       className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-                      type="submit"
+                      confirmMessage={`Save prompt timing for ${policy.status} ${policy.priority} cases?`}
+                      pendingChildren="Saving..."
                     >
                       Save
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )
               }

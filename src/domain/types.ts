@@ -47,18 +47,15 @@ export type SlaPolicy = {
 };
 
 export type IngestionReport = {
-  sourceSystem: string;
-  externalId: string;
+  caseID: string;
+  customerID: string;
   title: string;
   description: string;
   priority: Priority;
   departmentKey?: string;
-  customer: {
-    externalId?: string;
-    name?: string;
-    email?: string;
-    phone?: string;
-  };
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
   reportedAt?: string;
   rawPayload?: unknown;
 };

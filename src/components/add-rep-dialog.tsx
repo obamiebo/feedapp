@@ -2,11 +2,13 @@
 
 import { useRef } from "react";
 import { UserPlus, X } from "lucide-react";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { PasswordInput } from "@/components/ui/password-input";
-import type { AdminProductGroup, AdminProductSource, AdminRole } from "@/services/admin";
+import type { AdminDepartment, AdminProductGroup, AdminProductSource, AdminRole } from "@/services/admin";
 
 type AddRepDialogProps = {
   action: (formData: FormData) => void | Promise<void>;
+  departments: AdminDepartment[];
   roles: AdminRole[];
   productGroups: AdminProductGroup[];
   productSources: AdminProductSource[];
@@ -14,7 +16,7 @@ type AddRepDialogProps = {
 
 const inputClass = "rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none";
 
-export function AddRepDialog({ action, roles, productGroups, productSources }: AddRepDialogProps) {
+export function AddRepDialog({ action, departments, roles, productGroups, productSources }: AddRepDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   return (
@@ -70,6 +72,20 @@ export function AddRepDialog({ action, roles, productGroups, productSources }: A
             Provisioned
           </label>
           <fieldset className="flex flex-col gap-1.5 rounded-md border border-line p-3">
+            <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Departments</legend>
+            {departments.map((department) => (
+              <label className="flex items-center gap-1.5 text-sm text-muted" key={department.id}>
+                <input
+                  name="departmentIds"
+                  type="checkbox"
+                  value={department.id}
+                  className="size-4 rounded border-line accent-brand"
+                />
+                {department.name}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="flex flex-col gap-1.5 rounded-md border border-line p-3">
             <legend className="px-1 text-xs font-medium uppercase tracking-wide text-muted">Roles</legend>
             {roles.map((role) => (
               <label className="flex items-center gap-1.5 text-sm text-muted" key={role.id}>
@@ -114,12 +130,13 @@ export function AddRepDialog({ action, roles, productGroups, productSources }: A
             >
               Cancel
             </button>
-            <button
+            <ConfirmSubmitButton
               className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              type="submit"
+              confirmMessage="Create this rep account?"
+              pendingChildren="Creating..."
             >
               Create rep
-            </button>
+            </ConfirmSubmitButton>
           </div>
         </form>
       </dialog>

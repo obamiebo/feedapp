@@ -5,7 +5,8 @@ import type {
   CaseStatus as PrismaCaseStatus,
   Message,
   Prisma,
-  PrismaClient
+  PrismaClient,
+  Priority as PrismaPriority
 } from "@prisma/client";
 import type { AppUser, CaseStatus, FeedbackCase, Priority } from "@/domain/types";
 import { caseStatuses, priorities } from "@/domain/constants";
@@ -45,6 +46,38 @@ export type CaseListPage = {
   page: number;
   pageSize: number;
   pageCount: number;
+};
+
+export type ProductReportStatus = "NEW" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "REOPENED";
+
+export type ProductReportFilters = {
+  sourceSystem: string;
+  caseID?: string;
+  customerID?: string;
+  status?: ProductReportStatus;
+  from?: Date;
+  to?: Date;
+  limit?: number;
+  cursor?: string;
+};
+
+export type ProductReport = {
+  caseID: string;
+  customerID: string | null;
+  title: string;
+  description: string;
+  status: ProductReportStatus;
+  priority: Priority;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ProductReportPage = {
+  reports: ProductReport[];
+  nextCursor: string | null;
 };
 
 export type CaseTrend = {
@@ -118,6 +151,7 @@ export type CreateCaseRecord = {
 export type CaseRepository = {
   listCases(filters?: CaseListFilters): Promise<CaseListItem[]>;
   listCasesPage(query?: CaseListQuery, user?: AppUser): Promise<CaseListPage>;
+  listProductReports(filters: ProductReportFilters): Promise<ProductReportPage>;
   getCaseStats(filters?: CaseListFilters, user?: AppUser, now?: Date): Promise<CaseStatsSummary>;
   createCase(input: CreateCaseRecord): Promise<FeedbackCase>;
   getCaseById(id: string): Promise<FeedbackCase | null>;
@@ -220,6 +254,37 @@ function toCaseDetail(record: PrismaCaseDetail): CaseDetail {
       metadata: auditLog.metadata,
       createdAt: auditLog.createdAt
     }))
+  };
+}
+
+function toProductReport(record: {
+  id: string;
+  externalId: string | null;
+  title: string;
+  description: string;
+  status: PrismaCaseStatus;
+  priority: PrismaPriority;
+  createdAt: Date;
+  updatedAt: Date;
+  customer: {
+    externalId: string | null;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+}): ProductReport {
+  return {
+    caseID: record.externalId ?? record.id,
+    customerID: record.customer.externalId,
+    title: record.title,
+    description: record.description,
+    status: record.status,
+    priority: mapPriorityFromPrisma(record.priority),
+    customerName: record.customer.name,
+    customerEmail: record.customer.email,
+    customerPhone: record.customer.phone,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
   };
 }
 
@@ -383,6 +448,64 @@ export function createPrismaCaseRepository(client: PrismaClient = prisma): CaseR
         page,
         pageSize,
         pageCount: Math.max(1, Math.ceil(total / pageSize))
+      };
+    },
+
+    async listProductReports(filters) {
+      const limit = Math.min(Math.max(filters.limit ?? 50, 1), 100);
+      const where: Prisma.CaseWhereInput = {
+        sourceSystem: filters.sourceSystem
+      };
+
+      if (filters.caseID) {
+        where.externalId = filters.caseID;
+      }
+
+      if (filters.customerID) {
+        where.customer = { externalId: filters.customerID };
+      }
+
+      if (filters.status) {
+        where.status = filters.status;
+      }
+
+      if (filters.from || filters.to) {
+        where.createdAt = {
+          ...(filters.from ? { gte: filters.from } : {}),
+          ...(filters.to ? { lte: filters.to } : {})
+        };
+      }
+
+      const records = await client.case.findMany({
+        where,
+        select: {
+          id: true,
+          externalId: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          createdAt: true,
+          updatedAt: true,
+          customer: {
+            select: {
+              externalId: true,
+              name: true,
+              email: true,
+              phone: true
+            }
+          }
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+        take: limit + 1
+      });
+
+      const pageRecords = records.slice(0, limit);
+
+      return {
+        reports: pageRecords.map(toProductReport),
+        nextCursor: records.length > limit ? pageRecords.at(-1)?.id ?? null : null
       };
     },
 

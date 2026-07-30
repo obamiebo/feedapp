@@ -99,14 +99,6 @@ export function createIngestionService(dependencies?: Partial<IngestionServiceDe
     },
 
     async ingestReport(source, report, rawPayload) {
-      if (report.sourceSystem !== source.key) {
-        return {
-          ok: false,
-          status: 400,
-          error: "sourceSystem must match the authenticated integration source"
-        };
-      }
-
       const departmentKey = report.departmentKey || defaultDepartmentKey(source);
       const departmentList = await departments.listDepartments();
       const matchingDepartment = departmentList.find((item) => item.key === departmentKey);
@@ -142,7 +134,7 @@ export function createIngestionService(dependencies?: Partial<IngestionServiceDe
         };
       }
 
-      const idempotencyKey = buildIdempotencyKey(report.sourceSystem, report.externalId);
+      const idempotencyKey = buildIdempotencyKey(source.key, report.caseID);
       const existingEvent = await integrations.findEventByIdempotencyKey(idempotencyKey);
 
       if (existingEvent?.caseId) {
@@ -158,13 +150,13 @@ export function createIngestionService(dependencies?: Partial<IngestionServiceDe
         }
       }
 
-      const existingCase = await cases.getCaseBySourceExternalId(report.sourceSystem, report.externalId);
+      const existingCase = await cases.getCaseBySourceExternalId(source.key, report.caseID);
 
       if (existingCase) {
         await integrations.createEvent({
           sourceId: source.id,
           caseId: existingCase.id,
-          externalId: report.externalId,
+          externalId: report.caseID,
           idempotencyKey,
           rawPayload: rawPayload as Prisma.InputJsonValue,
           status: "duplicate"
@@ -183,9 +175,14 @@ export function createIngestionService(dependencies?: Partial<IngestionServiceDe
           description: report.description,
           priority: report.priority,
           departmentId: department.id,
-          customer: report.customer,
+          customer: {
+            externalId: report.customerID,
+            name: report.customerName,
+            email: report.customerEmail,
+            phone: report.customerPhone
+          },
           sourceSystem: source.key,
-          externalId: report.externalId
+          externalId: report.caseID
         },
         undefined
       );
@@ -193,7 +190,7 @@ export function createIngestionService(dependencies?: Partial<IngestionServiceDe
       await integrations.createEvent({
         sourceId: source.id,
         caseId: created.id,
-        externalId: report.externalId,
+        externalId: report.caseID,
         idempotencyKey,
         rawPayload: rawPayload as Prisma.InputJsonValue,
         status: "accepted"

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Gauge } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DataTable } from "@/components/ui/data-table";
 import type { Priority } from "@/domain/types";
 
@@ -107,12 +108,13 @@ export function SlaPolicySelector({ action, rows }: SlaPolicySelectorProps) {
                     type="number"
                   />
                 </label>
-                <button
+                <ConfirmSubmitButton
                   className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-                  type="submit"
+                  confirmMessage={`Save ${policy.departmentName} ${policy.priority} SLA targets?`}
+                  pendingChildren="Saving..."
                 >
                   Save
-                </button>
+                </ConfirmSubmitButton>
               </form>
             )
           }

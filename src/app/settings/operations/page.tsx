@@ -1,4 +1,4 @@
-import { Activity, Building2, Gauge, RefreshCw, ShieldCheck } from "lucide-react";
+import { Activity, Gauge, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
 import { revalidatePath } from "next/cache";
@@ -6,8 +6,8 @@ import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { SlaPolicySelector, type SlaPolicyRow } from "@/components/sla-policy-selector";
 import { StatusBadge } from "@/components/status-badge";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DataTable } from "@/components/ui/data-table";
-import { KeyFields } from "@/components/ui/key-fields";
 import { priorities } from "@/domain/constants";
 import type { Priority } from "@/domain/types";
 import { canManageAdmin } from "@/lib/access-control";
@@ -65,26 +65,6 @@ function deliveryLabel(status: string) {
 
 function numberValue(formData: FormData, key: string) {
   return Number(formData.get(key) ?? 0);
-}
-
-async function createDepartmentAction(formData: FormData) {
-  "use server";
-
-  const currentUser = await resolveCurrentUser();
-  const name = String(formData.get("name") ?? "").trim();
-  const key = String(formData.get("key") ?? "").trim();
-
-  if (!currentUser || !canManageAdmin(currentUser)) {
-    throw new Error("Current user cannot manage operations");
-  }
-
-  if (name.length < 2) {
-    throw new Error("Department name is required");
-  }
-
-  await createAdminService().createDepartment({ key, name }, currentUser.id);
-  revalidatePath("/settings/operations");
-  redirect("/settings/operations");
 }
 
 async function updateSlaPolicyAction(formData: FormData) {
@@ -214,67 +194,26 @@ export default async function SettingsOperationsPage({
       };
     })
   );
-  const inputClass = "rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none";
-
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-lg border border-line bg-panel shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
           <div className="flex items-center gap-2">
-            <Building2 size={18} className="text-muted" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-ink">Departments</h2>
-            <StatusBadge label={`${slaDirectory.departments.length} active`} tone="info" />
+            <Gauge size={18} className="text-muted" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-ink">SLA policies</h2>
+            <StatusBadge label={`${slaDirectory.slaPolicies.length} configured`} tone="info" />
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="rounded-md border border-line">
-            <DataTable
-              columns={[
-                {
-                  key: "name",
-                  header: "Name",
-                  render: (department) => <span className="font-medium text-ink">{department.name}</span>
-                },
-                { key: "key", header: "Key", render: (department) => department.key },
-                { key: "members", header: "Members", render: (department) => department.memberCount },
-                { key: "cases", header: "Cases", render: (department) => department.caseCount }
-              ]}
-              rows={slaDirectory.departments}
-              getRowKey={(department) => department.id}
-              emptyIcon={Building2}
-              emptyMessage="No departments are available."
-            />
-          </div>
-          <form action={createDepartmentAction} className="flex flex-col gap-3">
-            <KeyFields inputClass={inputClass} nameId="department-name" keyId="department-key" />
-            <button
-              className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              type="submit"
-            >
-              Create department
-            </button>
-          </form>
+        <div className="p-2">
+          {slaRows.length > 0 ? (
+            <SlaPolicySelector action={updateSlaPolicyAction} rows={slaRows} />
+          ) : (
+            <EmptyState icon={Gauge} message="No departments are available for SLA policy management." />
+          )}
         </div>
       </section>
 
-    <section className="rounded-lg border border-line bg-panel shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
-        <div className="flex items-center gap-2">
-          <Gauge size={18} className="text-muted" aria-hidden="true" />
-          <h2 className="text-sm font-semibold text-ink">SLA policies</h2>
-          <StatusBadge label={`${slaDirectory.slaPolicies.length} configured`} tone="info" />
-        </div>
-      </div>
-      <div className="p-2">
-        {slaRows.length > 0 ? (
-          <SlaPolicySelector action={updateSlaPolicyAction} rows={slaRows} />
-        ) : (
-          <EmptyState icon={Gauge} message="No departments are available for SLA policy management." />
-        )}
-      </div>
-    </section>
-
-    <section className="rounded-lg border border-line bg-panel shadow-sm">
+      <section className="rounded-lg border border-line bg-panel shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div className="flex items-center gap-2">
           <Activity size={18} className="text-muted" aria-hidden="true" />
@@ -351,13 +290,14 @@ export default async function SettingsOperationsPage({
           <StatusBadge label={`${failedMessages.length} failed`} tone={failedMessages.length > 0 ? "critical" : "ok"} />
         </div>
         <form action={retryFailedMessagesAction}>
-          <button
+          <ConfirmSubmitButton
             className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+            confirmMessage="Retry all failed customer deliveries?"
             disabled={failedMessages.length === 0}
-            type="submit"
+            pendingChildren="Retrying..."
           >
             <RefreshCw size={15} /> Retry failed
-          </button>
+          </ConfirmSubmitButton>
         </form>
       </div>
 
@@ -428,13 +368,14 @@ export default async function SettingsOperationsPage({
           <StatusBadge label={`${failedCallbacks.length} failed`} tone={failedCallbacks.length > 0 ? "critical" : "ok"} />
         </div>
         <form action={retryFailedCallbacksAction}>
-          <button
+          <ConfirmSubmitButton
             className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+            confirmMessage="Retry all failed product callbacks?"
             disabled={failedCallbacks.length === 0}
-            type="submit"
+            pendingChildren="Retrying..."
           >
             <RefreshCw size={15} /> Retry callbacks
-          </button>
+          </ConfirmSubmitButton>
         </form>
       </div>
 
