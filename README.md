@@ -118,6 +118,28 @@ curl 'http://localhost:3000/api/ingestion/reports?status=IN_PROGRESS&customerID=
 
 Supported filters are `caseID`, `customerID`, `status`, `from`, `to`, `limit`, and `cursor`. Status values are `NEW`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`, and `REOPENED`.
 
+Trusted product dashboards can also deep-link pre-provisioned FeedApp users without a FeedApp login screen:
+
+```text
+GET /external-entry?token=<signed-jwt>
+```
+
+The external dashboard backend signs an `HS256` JWT using `EXTERNAL_ENTRY_SECRET`. Required claims:
+
+```json
+{
+  "iss": "fihankra-dashboard",
+  "sub": "their-user-id",
+  "email": "ama@fihankra.com",
+  "name": "Ama Mensah",
+  "sourceKeys": ["fihankra-feedback"],
+  "iat": 1785492000,
+  "exp": 1785492300
+}
+```
+
+FeedApp verifies the signature, issuer, expiry, allowed source keys, and the pre-provisioned user's FeedApp product grants before creating a session.
+
 ## Architecture Direction
 
 The first production version should remain a modular monolith with clear module boundaries. Use managed Postgres, a queue/worker runtime, object storage, first-party email/password authentication with app provisioning, provider adapters for email/SMS, and REST/webhook ingestion for external systems. Keep SSO optional for a later company identity-provider integration.

@@ -480,6 +480,9 @@ function makeDependencies(initialCase = makeCase(), options: { callbacksEnabled?
 
           return null;
         },
+        async getAppUserByEmail() {
+          return null;
+        },
         async listAppUsers() {
           return [
             makeUser({

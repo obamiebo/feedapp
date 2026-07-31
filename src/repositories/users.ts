@@ -14,6 +14,7 @@ export type UserRepository = {
   listAssignableUsersByProductSourceKey(sourceKey: string): Promise<UserSummary[]>;
   listAppUsersByProductSourceKey(sourceKey: string): Promise<AppUser[]>;
   getAppUser(id: string): Promise<AppUser | null>;
+  getAppUserByEmail(email: string): Promise<AppUser | null>;
   listAppUsers(): Promise<AppUser[]>;
 };
 
@@ -128,6 +129,37 @@ export function createPrismaUserRepository(client: PrismaClient = prisma): UserR
     async getAppUser(id) {
       const user = await client.user.findUnique({
         where: { id },
+        include: {
+          assignedCases: { select: { id: true } },
+          memberships: { select: { departmentId: true } },
+          productAccess: {
+            include: {
+              source: { select: { key: true } }
+            }
+          },
+          productGroupAccess: {
+            include: {
+              group: {
+                select: {
+                  sources: { select: { key: true } }
+                }
+              }
+            }
+          },
+          roleAssignments: {
+            include: {
+              role: { select: { name: true } }
+            }
+          }
+        }
+      });
+
+      return user ? toAppUser(user) : null;
+    },
+
+    async getAppUserByEmail(email) {
+      const user = await client.user.findUnique({
+        where: { email: email.trim().toLowerCase() },
         include: {
           assignedCases: { select: { id: true } },
           memberships: { select: { departmentId: true } },
