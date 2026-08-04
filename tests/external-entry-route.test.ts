@@ -40,7 +40,7 @@ describe("/external-entry", () => {
 
     const response = await GET(new Request("https://feedapp.example.com/external-entry?token=signed-token"));
 
-    expect(authenticate).toHaveBeenCalledWith("signed-token");
+    expect(authenticate).toHaveBeenCalledWith("signed-token", "portal");
     expect(createSession).toHaveBeenCalledWith("user-fihankra");
     expect(setSessionCookie).toHaveBeenCalledWith("session-token", new Date("2026-07-31T22:00:00.000Z"));
     expect(setEntryContext).toHaveBeenCalledWith({
@@ -63,7 +63,7 @@ describe("/external-entry", () => {
       new Request("https://feedapp.example.com/external-entry?token=signed-token&mode=embed")
     );
 
-    expect(authenticate).toHaveBeenCalledWith("signed-token");
+    expect(authenticate).toHaveBeenCalledWith("signed-token", "embed");
     expect(createSession).toHaveBeenCalledWith("user-fihankra");
     expect(setSessionCookie).toHaveBeenCalledWith("session-token", new Date("2026-07-31T22:00:00.000Z"));
     expect(setEntryContext).toHaveBeenCalledWith({

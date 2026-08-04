@@ -1,13 +1,14 @@
-import { Boxes, Power, RefreshCw, ShieldCheck, UserPlus, UsersRound, XCircle } from "lucide-react";
+import { Boxes, ShieldCheck, UsersRound, XCircle } from "lucide-react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
+import { ManageProductSourceDialog } from "@/components/manage-product-source-dialog";
+import { ProductGroupDialog } from "@/components/product-group-dialog";
 import { ProductSourceDialog } from "@/components/product-source-dialog";
+import { ProductRosterUserDialog } from "@/components/product-roster-user-dialog";
 import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DataTable } from "@/components/ui/data-table";
-import { KeyFields } from "@/components/ui/key-fields";
-import { PasswordInput } from "@/components/ui/password-input";
 import type { AdminProductGroup, AdminProductSource, ProductRosterMember } from "@/services/admin";
 import { canManageAdmin, canManageAnyProductRoster } from "@/lib/access-control";
 import { resolveCurrentUser } from "@/lib/current-user";
@@ -36,6 +37,28 @@ async function createProductGroupAction(formData: FormData) {
   }
 
   await createAdminService().createProductGroup({ key, name, description }, currentUser.id);
+  revalidatePath("/settings/products");
+  redirect("/settings/products");
+}
+
+async function updateProductGroupAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const groupId = String(formData.get("groupId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const productSourceIds = formData.getAll("productSourceIds").map(String).filter(Boolean);
+
+  if (!currentUser || !canManageAdmin(currentUser)) {
+    throw new Error("Current user cannot manage settings");
+  }
+
+  if (!groupId || name.length < 2) {
+    throw new Error("Product group and name are required");
+  }
+
+  await createAdminService().updateProductGroup({ groupId, name, description, productSourceIds }, currentUser.id);
   revalidatePath("/settings/products");
   redirect("/settings/products");
 }
@@ -163,6 +186,62 @@ async function updateProductSourceCallbackAction(formData: FormData) {
   redirect("/settings/products");
 }
 
+async function updateProductExternalEntryAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const sourceId = String(formData.get("sourceId") ?? "");
+  const issuer = String(formData.get("issuer") ?? "").trim();
+  const tokenTtlSeconds = Number(formData.get("tokenTtlSeconds") ?? 300);
+  const allowedOrigins = String(formData.get("allowedOrigins") ?? "")
+    .split(/\r?\n|,/)
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const allowedModes = formData
+    .getAll("allowedModes")
+    .map(String)
+    .filter((mode): mode is "portal" | "embed" => mode === "portal" || mode === "embed");
+
+  if (!currentUser || !canManageAdmin(currentUser)) {
+    throw new Error("Current user cannot manage settings");
+  }
+
+  if (!sourceId) {
+    throw new Error("Product source is required");
+  }
+
+  let result: { key: string; entrySecret: string | null };
+
+  try {
+    result = await createAdminService().updateProductExternalEntry(
+      {
+        sourceId,
+        enabled: checkboxValue(formData, "enabled"),
+        issuer,
+        tokenTtlSeconds,
+        allowedOrigins,
+        allowedModes,
+        rotateSecret: checkboxValue(formData, "rotateSecret")
+      },
+      currentUser.id
+    );
+  } catch (error) {
+    const entryError =
+      error instanceof Error && error.message === "External entry issuer is required" ? "missing-issuer" : "save-failed";
+    redirect(`/settings/products?entrySourceId=${encodeURIComponent(sourceId)}&entryError=${entryError}`);
+  }
+
+  revalidatePath("/settings/products");
+  const params = new URLSearchParams({ entrySourceId: sourceId });
+
+  if (result.entrySecret) {
+    params.set("newEntryKey", result.key);
+    params.set("newEntrySecret", result.entrySecret);
+  }
+
+  redirect(`/settings/products?${params.toString()}`);
+}
+
 async function addProductRosterUserAction(formData: FormData) {
   "use server";
 
@@ -249,6 +328,18 @@ export default async function SettingsProductsPage({
   const productError = Array.isArray(resolvedSearchParams.productError)
     ? resolvedSearchParams.productError[0]
     : resolvedSearchParams.productError;
+  const entrySourceId = Array.isArray(resolvedSearchParams.entrySourceId)
+    ? resolvedSearchParams.entrySourceId[0]
+    : resolvedSearchParams.entrySourceId;
+  const entryError = Array.isArray(resolvedSearchParams.entryError)
+    ? resolvedSearchParams.entryError[0]
+    : resolvedSearchParams.entryError;
+  const newEntryKey = Array.isArray(resolvedSearchParams.newEntryKey)
+    ? resolvedSearchParams.newEntryKey[0]
+    : resolvedSearchParams.newEntryKey;
+  const newEntrySecret = Array.isArray(resolvedSearchParams.newEntrySecret)
+    ? resolvedSearchParams.newEntrySecret[0]
+    : resolvedSearchParams.newEntrySecret;
 
   const adminService = createAdminService();
   const [directory, rosterDirectory] = await Promise.all([
@@ -264,8 +355,6 @@ export default async function SettingsProductsPage({
     ) ?? [];
 
   const inputClass = "rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none";
-  const primaryButtonClass =
-    "inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark";
   const rosterErrorMessage =
     rosterError === "invalid-email"
       ? "Enter a valid rep email address."
@@ -280,12 +369,45 @@ export default async function SettingsProductsPage({
       : productError === "create-failed"
         ? "The product could not be created. Check the product details and try again."
         : null;
+  const selectedEntrySource =
+    directory.productSources.find((source) => source.id === entrySourceId) ?? directory.productSources[0] ?? null;
+  const entryErrorMessage =
+    entryError === "missing-issuer"
+      ? "Issuer is required when embedded access is enabled."
+      : entryError === "save-failed"
+        ? "Embedded access settings could not be saved."
+        : null;
 
   const rosterSection = (
     <section className="rounded-lg border border-line bg-panel shadow-sm">
-      <div className="flex items-center gap-2 border-b border-line px-5 py-4">
-        <UsersRound size={18} className="text-muted" aria-hidden="true" />
-        <h2 className="text-sm font-semibold text-ink">Product reps</h2>
+      <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex items-center gap-2">
+          <UsersRound size={18} className="text-muted" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-ink">Product reps</h2>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          {rosterDirectory.selectedSource ? (
+            <form className="min-w-[260px]" method="get">
+              <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="roster-source">
+                Product
+                <AutoSubmitSelect
+                  id="roster-source"
+                  name="sourceId"
+                  defaultValue={rosterDirectory.selectedSource.id}
+                  className={inputClass}
+                  options={rosterDirectory.productSources
+                    .filter((source) => source.canManageRoster)
+                    .map((source) => ({ value: source.id, label: source.name }))}
+                />
+              </label>
+            </form>
+          ) : null}
+          <ProductRosterUserDialog
+            action={addProductRosterUserAction}
+            selectedSource={rosterDirectory.selectedSource}
+            users={teamDirectory?.users}
+          />
+        </div>
       </div>
       {rosterDirectory.selectedSource ? (
         <div className="flex flex-col gap-4 p-5">
@@ -294,20 +416,6 @@ export default async function SettingsProductsPage({
               {rosterErrorMessage}
             </div>
           ) : null}
-          <form className="max-w-sm" method="get">
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="roster-source">
-              Product
-              <AutoSubmitSelect
-                id="roster-source"
-                name="sourceId"
-                defaultValue={rosterDirectory.selectedSource.id}
-                className={inputClass}
-                options={rosterDirectory.productSources
-                  .filter((source) => source.canManageRoster)
-                  .map((source) => ({ value: source.id, label: source.name }))}
-              />
-            </label>
-          </form>
 
           <div className="rounded-md border border-line">
             <DataTable<ProductRosterMember>
@@ -370,21 +478,6 @@ export default async function SettingsProductsPage({
               emptyMessage="No reps have access to this product yet."
             />
           </div>
-
-          <form action={addProductRosterUserAction} className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <input name="sourceId" type="hidden" value={rosterDirectory.selectedSource.id} />
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="rep-email">
-              Add existing rep by email
-              <input id="rep-email" name="email" type="email" required className={inputClass} />
-            </label>
-            <ConfirmSubmitButton
-              className={`${primaryButtonClass} self-end`}
-              confirmMessage="Add this rep to the product?"
-              pendingChildren="Adding..."
-            >
-              <UserPlus size={15} /> Add rep
-            </ConfirmSubmitButton>
-          </form>
         </div>
       ) : (
         <div className="p-6">
@@ -395,264 +488,120 @@ export default async function SettingsProductsPage({
   );
 
   return canManagePlatform ? (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="flex flex-col gap-6">
-        {rosterSection}
+    <div className="flex flex-col gap-6">
+      {rosterSection}
 
-        <section className="rounded-lg border border-line bg-panel shadow-sm">
-          <div className="flex items-center gap-2 border-b border-line px-5 py-4">
+      <section className="rounded-lg border border-line bg-panel shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2">
             <Boxes size={18} className="text-muted" aria-hidden="true" />
             <h2 className="text-sm font-semibold text-ink">Product sources</h2>
           </div>
-          {productErrorMessage ? (
-            <div className="mx-5 mt-4 rounded-md border border-critical/30 bg-critical-bg px-3 py-2 text-sm text-critical">
-              {productErrorMessage}
-            </div>
-          ) : null}
-          {newProductKey && newProductSecret ? (
-            <div className="mx-5 mt-4 flex flex-col gap-1 rounded-md border border-warning-bg bg-warning-bg p-4 text-sm">
-              <strong className="text-warning">Secret generated for {newProductKey}</strong>
-              <span className="text-muted">Store this now. It will not be shown again.</span>
-              <code className="mt-1 break-all rounded bg-panel px-2 py-1 text-xs text-ink">{newProductSecret}</code>
-            </div>
-          ) : null}
-          <div className="p-2">
-            <DataTable<AdminProductSource>
-              columns={[
-                {
-                  key: "name",
-                  header: "Name",
-                  render: (source) => <span className="font-medium text-ink">{source.name}</span>
-                },
-                { key: "key", header: "Key", render: (source) => source.key },
-                {
-                  key: "group",
-                  header: "Group",
-                  render: (source) =>
-                    directory.productGroups.find((group) => group.id === source.groupId)?.name ?? "Ungrouped"
-                },
-                { key: "status", header: "Status", render: (source) => (source.enabled ? "Enabled" : "Disabled") },
-                { key: "events", header: "Events", render: (source) => source.eventCount },
-                { key: "secret", header: "Secret", render: (source) => (source.hasSecret ? "Set" : "Missing") },
-                {
-                  key: "callback",
-                  header: "Callback",
-                  render: (source) => (source.callbackConfigured ? "Configured" : "Missing")
-                }
-              ]}
-              rows={directory.productSources}
-              getRowKey={(source) => source.id}
-              emptyIcon={Boxes}
-              emptyMessage="No product sources yet."
+          <div className="flex flex-wrap gap-2">
+            <ProductSourceDialog
+              action={createProductSourceAction}
+              productGroups={directory.productGroups}
+              productManagers={productManagerOptions}
+            />
+            <ManageProductSourceDialog
+              selectedSource={selectedEntrySource}
+              productSources={directory.productSources}
+              productGroups={directory.productGroups}
+              updateSourceAction={updateProductSourceAction}
+              rotateSecretAction={rotateProductSourceSecretAction}
+              updateCallbackAction={updateProductSourceCallbackAction}
+              updateExternalEntryAction={updateProductExternalEntryAction}
+              entryErrorMessage={entryErrorMessage}
+              newEntryKey={newEntryKey}
+              newEntrySecret={newEntrySecret}
             />
           </div>
-        </section>
+        </div>
+        {productErrorMessage ? (
+          <div className="mx-5 mt-4 rounded-md border border-critical/30 bg-critical-bg px-3 py-2 text-sm text-critical">
+            {productErrorMessage}
+          </div>
+        ) : null}
+        {newProductKey && newProductSecret ? (
+          <div className="mx-5 mt-4 flex flex-col gap-1 rounded-md border border-warning-bg bg-warning-bg p-4 text-sm">
+            <strong className="text-warning">Secret generated for {newProductKey}</strong>
+            <span className="text-muted">Store this now. It will not be shown again.</span>
+            <code className="mt-1 break-all rounded bg-panel px-2 py-1 text-xs text-ink">{newProductSecret}</code>
+          </div>
+        ) : null}
+        <div className="p-2">
+          <DataTable<AdminProductSource>
+            columns={[
+              {
+                key: "name",
+                header: "Name",
+                render: (source) => <span className="font-medium text-ink">{source.name}</span>
+              },
+              { key: "key", header: "Key", render: (source) => source.key },
+              {
+                key: "group",
+                header: "Group",
+                render: (source) =>
+                  directory.productGroups.find((group) => group.id === source.groupId)?.name ?? "Ungrouped"
+              },
+              { key: "status", header: "Status", render: (source) => (source.enabled ? "Enabled" : "Disabled") },
+              { key: "events", header: "Events", render: (source) => source.eventCount },
+              { key: "secret", header: "Secret", render: (source) => (source.hasSecret ? "Set" : "Missing") },
+              {
+                key: "callback",
+                header: "Callback",
+                render: (source) => (source.callbackConfigured ? "Configured" : "Missing")
+              },
+              {
+                key: "embeddedEntry",
+                header: "Embedded entry",
+                render: (source) => (source.externalEntryConfigured ? "Enabled" : "Disabled")
+              }
+            ]}
+            rows={directory.productSources}
+            getRowKey={(source) => source.id}
+            emptyIcon={Boxes}
+            emptyMessage="No product sources yet."
+          />
+        </div>
+      </section>
 
-        <section className="rounded-lg border border-line bg-panel shadow-sm">
-          <div className="flex items-center gap-2 border-b border-line px-5 py-4">
+      <section className="rounded-lg border border-line bg-panel shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
             <Boxes size={18} className="text-muted" aria-hidden="true" />
             <h2 className="text-sm font-semibold text-ink">Product groups</h2>
           </div>
-          <div className="p-2">
-            <DataTable<AdminProductGroup>
-              columns={[
-                {
-                  key: "name",
-                  header: "Name",
-                  render: (group) => (
-                    <div>
-                      <div className="font-medium text-ink">{group.name}</div>
-                      {group.description ? <div className="text-xs text-muted">{group.description}</div> : null}
-                    </div>
-                  )
-                },
-                { key: "key", header: "Key", render: (group) => group.key },
-                { key: "products", header: "Products", render: (group) => group.productCount }
-              ]}
-              rows={directory.productGroups}
-              getRowKey={(group) => group.id}
-              emptyIcon={Boxes}
-              emptyMessage="No product groups yet."
-            />
-          </div>
-        </section>
-      </div>
-
-      <div className="flex flex-col gap-6">
-        <div className="flex justify-end">
-          <ProductSourceDialog
-            action={createProductSourceAction}
+          <ProductGroupDialog
+            createAction={createProductGroupAction}
+            updateAction={updateProductGroupAction}
             productGroups={directory.productGroups}
-            productManagers={productManagerOptions}
+            productSources={directory.productSources}
           />
         </div>
-
-        <section className="rounded-lg border border-line bg-panel shadow-sm">
-          <div className="flex items-center gap-2 border-b border-line px-5 py-4">
-            <Boxes size={18} className="text-muted" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-ink">Add product group</h2>
-          </div>
-          <form action={createProductGroupAction} className="flex flex-col gap-3 p-5">
-            <KeyFields inputClass={inputClass} nameId="product-group-name" keyId="product-group-key" />
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="product-group-description">
-              Description
-              <input
-                id="product-group-description"
-                name="description"
-                className={inputClass}
-              />
-            </label>
-            <ConfirmSubmitButton
-              className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              confirmMessage="Create this product group?"
-              pendingChildren="Creating..."
-            >
-              Create group
-            </ConfirmSubmitButton>
-          </form>
-        </section>
-
-        <section className="rounded-lg border border-line bg-panel shadow-sm">
-          <div className="flex items-center gap-2 border-b border-line px-5 py-4">
-            <Power size={18} className="text-muted" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-ink">Manage source</h2>
-          </div>
-          <form action={updateProductSourceAction} className="flex flex-col gap-3 p-5">
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="manage-source">
-              Source
-              <select
-                id="manage-source"
-                name="sourceId"
-                required
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              >
-                {directory.productSources.map((source) => (
-                  <option key={source.id} value={source.id}>
-                    {source.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="manage-source-name">
-              Name
-              <input
-                id="manage-source-name"
-                name="name"
-                minLength={2}
-                required
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="manage-source-type">
-              Type
-              <select
-                id="manage-source-type"
-                name="type"
-                defaultValue="api"
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              >
-                <option value="api">API</option>
-                <option value="webhook">Webhook</option>
-                <option value="manual">Manual</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="manage-source-group">
-              Product group
-              <select
-                id="manage-source-group"
-                name="groupId"
-                defaultValue=""
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              >
-                <option value="">Ungrouped</option>
-                {directory.productGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1.5 text-sm text-muted">
-              <input name="enabled" type="checkbox" defaultChecked className="size-4 rounded border-line accent-brand" />
-              Enabled
-            </label>
-            <ConfirmSubmitButton
-              className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-              confirmMessage="Save changes to this product source?"
-              pendingChildren="Saving..."
-            >
-              Save source
-            </ConfirmSubmitButton>
-          </form>
-          <form action={rotateProductSourceSecretAction} className="flex flex-col gap-3 border-t border-line p-5">
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="rotate-source">
-              Rotate secret
-              <select
-                id="rotate-source"
-                name="sourceId"
-                required
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              >
-                {directory.productSources.map((source) => (
-                  <option key={source.id} value={source.id}>
-                    {source.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <ConfirmSubmitButton
-              className="inline-flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-              confirmMessage="Rotate this source secret? Existing integrations using the old secret will stop working."
-              pendingChildren="Rotating..."
-            >
-              <RefreshCw size={15} /> Rotate secret
-            </ConfirmSubmitButton>
-          </form>
-          <form action={updateProductSourceCallbackAction} className="flex flex-col gap-3 border-t border-line p-5">
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="callback-source">
-              Status callback source
-              <select
-                id="callback-source"
-                name="sourceId"
-                required
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              >
-                {directory.productSources.map((source) => (
-                  <option key={source.id} value={source.id}>
-                    {source.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="callback-url">
-              Callback URL
-              <input
-                id="callback-url"
-                name="callbackUrl"
-                placeholder="https://product.example.com/feedapp/callback"
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="callback-secret">
-              Signing secret
-              <PasswordInput
-                id="callback-secret"
-                name="callbackSecret"
-                placeholder="Shared callback signing secret"
-                className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
-              />
-            </label>
-            <p className="text-xs text-muted">Leave URL and secret blank to disable callbacks for the selected source.</p>
-            <ConfirmSubmitButton
-              className="inline-flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-              confirmMessage="Save callback settings for this product source?"
-              pendingChildren="Saving..."
-            >
-              Save callback
-            </ConfirmSubmitButton>
-          </form>
-        </section>
-      </div>
+        <div className="p-2">
+          <DataTable<AdminProductGroup>
+            columns={[
+              {
+                key: "name",
+                header: "Name",
+                render: (group) => (
+                  <div>
+                    <div className="font-medium text-ink">{group.name}</div>
+                    {group.description ? <div className="text-xs text-muted">{group.description}</div> : null}
+                  </div>
+                )
+              },
+              { key: "key", header: "Key", render: (group) => group.key },
+              { key: "products", header: "Products", render: (group) => group.productCount }
+            ]}
+            rows={directory.productGroups}
+            getRowKey={(group) => group.id}
+            emptyIcon={Boxes}
+            emptyMessage="No product groups yet."
+          />
+        </div>
+      </section>
     </div>
   ) : (
     <div className="max-w-4xl">{rosterSection}</div>

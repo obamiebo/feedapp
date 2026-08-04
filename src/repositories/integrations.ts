@@ -6,6 +6,15 @@ export type ProductCallbackConfig = {
   secret: string | null;
 };
 
+export type ProductExternalEntryConfig = {
+  enabled: boolean;
+  issuer: string | null;
+  secret: string | null;
+  tokenTtlSeconds: number;
+  allowedOrigins: string[];
+  allowedModes: Array<"portal" | "embed">;
+};
+
 export type IntegrationSourceRecord = {
   id: string;
   key: string;
@@ -57,6 +66,7 @@ export type IntegrationCallbackAttemptRecord = {
 
 export type IntegrationRepository = {
   findSourceByKey(key: string): Promise<IntegrationSourceRecord | null>;
+  findSourcesByKeys(keys: string[]): Promise<IntegrationSourceRecord[]>;
   listProductSources(): Promise<ProductSourceSummary[]>;
   listProductGroups(): Promise<ProductGroupSummary[]>;
   updateSourceCallbackConfig(input: { sourceId: string; callbackUrl?: string; callbackSecret?: string }): Promise<void>;
@@ -152,6 +162,51 @@ export function getProductCallbackConfig(config: Prisma.JsonValue): ProductCallb
   };
 }
 
+export function getProductExternalEntryConfig(config: Prisma.JsonValue): ProductExternalEntryConfig {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return {
+      enabled: false,
+      issuer: null,
+      secret: null,
+      tokenTtlSeconds: 300,
+      allowedOrigins: [],
+      allowedModes: ["embed"]
+    };
+  }
+
+  const record = config as Record<string, unknown>;
+  const externalEntry = record.externalEntry;
+
+  if (!externalEntry || typeof externalEntry !== "object" || Array.isArray(externalEntry)) {
+    return {
+      enabled: false,
+      issuer: null,
+      secret: null,
+      tokenTtlSeconds: 300,
+      allowedOrigins: [],
+      allowedModes: ["embed"]
+    };
+  }
+
+  const entry = externalEntry as Record<string, unknown>;
+  const tokenTtlSeconds = Number(entry.tokenTtlSeconds ?? 300);
+  const allowedOrigins = Array.isArray(entry.allowedOrigins)
+    ? entry.allowedOrigins.filter((origin): origin is string => typeof origin === "string" && origin.trim().length > 0)
+    : [];
+  const configuredModes = Array.isArray(entry.allowedModes)
+    ? entry.allowedModes.filter((mode): mode is "portal" | "embed" => mode === "portal" || mode === "embed")
+    : [];
+
+  return {
+    enabled: entry.enabled === true,
+    issuer: typeof entry.issuer === "string" && entry.issuer.trim() ? entry.issuer.trim() : null,
+    secret: typeof entry.secret === "string" && entry.secret.trim() ? entry.secret.trim() : null,
+    tokenTtlSeconds: Number.isFinite(tokenTtlSeconds) && tokenTtlSeconds > 0 ? tokenTtlSeconds : 300,
+    allowedOrigins,
+    allowedModes: configuredModes.length > 0 ? configuredModes : ["embed"]
+  };
+}
+
 function mergeCallbackConfig(
   config: Prisma.JsonValue,
   input: { callbackUrl?: string; callbackSecret?: string }
@@ -198,6 +253,26 @@ export function createPrismaIntegrationRepository(client: PrismaClient = prisma)
       });
 
       return record ? toSource(record) : null;
+    },
+
+    async findSourcesByKeys(keys) {
+      if (keys.length === 0) {
+        return [];
+      }
+
+      const records = await client.integrationSource.findMany({
+        where: { key: { in: keys } },
+        select: {
+          id: true,
+          key: true,
+          name: true,
+          enabled: true,
+          secretHash: true,
+          config: true
+        }
+      });
+
+      return records.map(toSource);
     },
 
     listProductSources() {

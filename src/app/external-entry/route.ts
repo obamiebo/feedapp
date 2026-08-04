@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const token = url.searchParams.get("token");
   const requestedMode = url.searchParams.get("mode");
   const mode: EntryMode = requestedMode === "embed" ? "embed" : "portal";
-  const result = await createExternalEntryService().authenticate(token);
+  const result = await createExternalEntryService().authenticate(token, mode);
 
   if (!result.ok) {
     return NextResponse.redirect(externalEntryErrorUrl(request, result.reason));

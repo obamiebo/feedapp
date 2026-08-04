@@ -1,5 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { AppUser } from "@/domain/types";
+import type { EntryMode } from "@/lib/session-cookie";
+import type { IntegrationRepository, IntegrationSourceRecord } from "@/repositories/integrations";
+import { createPrismaIntegrationRepository, getProductExternalEntryConfig } from "@/repositories/integrations";
 import { createPrismaUserRepository, type UserRepository } from "@/repositories/users";
 
 export type ExternalEntryConfig = {
@@ -43,7 +46,7 @@ export type ExternalEntryResult =
     };
 
 type ExternalEntryDependencies = {
-  config: ExternalEntryConfig | null;
+  integrations: IntegrationRepository;
   users: UserRepository;
   now: () => Date;
 };
@@ -85,31 +88,6 @@ function parseClaims(value: unknown): ExternalEntryClaims | null {
     sourceKeys,
     iat: value.iat,
     exp: value.exp
-  };
-}
-
-function parseConfiguredSources(value: string | undefined) {
-  return (value ?? "")
-    .split(",")
-    .map((sourceKey) => sourceKey.trim())
-    .filter(Boolean);
-}
-
-export function externalEntryConfigFromEnv(env: Partial<NodeJS.ProcessEnv> = process.env): ExternalEntryConfig | null {
-  const issuer = env.EXTERNAL_ENTRY_ISSUER?.trim();
-  const secret = env.EXTERNAL_ENTRY_SECRET?.trim();
-  const allowedSourceKeys = parseConfiguredSources(env.EXTERNAL_ENTRY_ALLOWED_SOURCES);
-  const tokenTtlSeconds = Number(env.EXTERNAL_ENTRY_TOKEN_TTL_SECONDS ?? 300);
-
-  if (!issuer || !secret || allowedSourceKeys.length === 0) {
-    return null;
-  }
-
-  return {
-    issuer,
-    secret,
-    allowedSourceKeys,
-    tokenTtlSeconds: Number.isFinite(tokenTtlSeconds) && tokenTtlSeconds > 0 ? tokenTtlSeconds : 300
   };
 }
 
@@ -177,26 +155,110 @@ export function verifyExternalEntryToken(
   }
 }
 
+function tokenClaimsWithoutVerifyingSignature(token: string): ExternalEntryClaims | null {
+  const parts = token.split(".");
+
+  if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
+    return null;
+  }
+
+  try {
+    return parseClaims(base64UrlJson(parts[1]));
+  } catch {
+    return null;
+  }
+}
+
+function sourceEntryConfig(source: IntegrationSourceRecord) {
+  const config = getProductExternalEntryConfig(source.config);
+
+  if (!source.enabled || !config.enabled || !config.issuer || !config.secret) {
+    return null;
+  }
+
+  return config;
+}
+
+async function verifyExternalEntryTokenFromSources(
+  token: string,
+  sources: IntegrationSourceRecord[],
+  now: Date,
+  mode: EntryMode
+): Promise<{ ok: true; claims: ExternalEntryClaims } | { ok: false; reason: ExternalEntryFailureReason }> {
+  const unverifiedClaims = tokenClaimsWithoutVerifyingSignature(token);
+
+  if (!unverifiedClaims) {
+    return { ok: false, reason: "invalid-token" };
+  }
+
+  const candidates = sources
+    .map((source) => ({ source, config: sourceEntryConfig(source) }))
+    .filter((candidate): candidate is { source: IntegrationSourceRecord; config: NonNullable<ReturnType<typeof sourceEntryConfig>> } =>
+      Boolean(candidate.config && candidate.config.issuer === unverifiedClaims.iss && candidate.config.allowedModes.includes(mode))
+    );
+
+  if (candidates.length === 0) {
+    return { ok: false, reason: "source-not-allowed" };
+  }
+
+  for (const candidate of candidates) {
+    const issuer = candidate.config.issuer;
+    const secret = candidate.config.secret;
+
+    if (!issuer || !secret) {
+      continue;
+    }
+
+    const verified = verifyExternalEntryToken(
+      token,
+      {
+        issuer,
+        secret,
+        allowedSourceKeys: candidates
+          .filter((item) => item.config.secret === secret)
+          .map((item) => item.source.key),
+        tokenTtlSeconds: candidate.config.tokenTtlSeconds
+      },
+      now
+    );
+
+    if (verified.ok) {
+      return verified;
+    }
+
+    if (verified.reason !== "invalid-token") {
+      return verified;
+    }
+  }
+
+  return { ok: false, reason: "invalid-token" };
+}
+
+type ExternalEntryVerificationResult =
+  | { ok: true; claims: ExternalEntryClaims }
+  | { ok: false; reason: ExternalEntryFailureReason };
+
 export type ExternalEntryService = {
-  authenticate(token: string | null): Promise<ExternalEntryResult>;
+  authenticate(token: string | null, mode?: EntryMode): Promise<ExternalEntryResult>;
 };
 
 export function createExternalEntryService(dependencies?: Partial<ExternalEntryDependencies>): ExternalEntryService {
-  const config = dependencies?.config ?? externalEntryConfigFromEnv();
+  const integrations = dependencies?.integrations ?? createPrismaIntegrationRepository();
   const users = dependencies?.users ?? createPrismaUserRepository();
   const now = dependencies?.now ?? (() => new Date());
 
   return {
-    async authenticate(token) {
-      if (!config) {
-        return { ok: false, reason: "not-configured" };
-      }
-
+    async authenticate(token, mode = "portal") {
       if (!token) {
         return { ok: false, reason: "missing-token" };
       }
 
-      const verified = verifyExternalEntryToken(token, config, now());
+      const unverifiedClaims = tokenClaimsWithoutVerifyingSignature(token);
+      const configuredSources = unverifiedClaims ? await integrations.findSourcesByKeys(unverifiedClaims.sourceKeys) : [];
+      const verified: ExternalEntryVerificationResult =
+        configuredSources.length > 0
+          ? await verifyExternalEntryTokenFromSources(token, configuredSources, now(), mode)
+          : { ok: false, reason: "not-configured" };
 
       if (!verified.ok) {
         return verified;

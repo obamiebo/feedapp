@@ -513,6 +513,9 @@ function makeDependencies(initialCase = makeCase(), options: { callbacksEnabled?
               : {}
           };
         },
+        async findSourcesByKeys() {
+          return [];
+        },
         async listProductSources() {
           return [];
         },

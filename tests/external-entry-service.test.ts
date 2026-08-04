@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { AppUser } from "@/domain/types";
 import {
   createExternalEntryService,
-  externalEntryConfigFromEnv,
   type ExternalEntryClaims,
   type ExternalEntryConfig,
   verifyExternalEntryToken
@@ -54,23 +53,37 @@ function makeUser(overrides: Partial<AppUser> = {}): AppUser {
   };
 }
 
-describe("external entry service", () => {
-  it("loads external entry config from environment variables", () => {
-    expect(
-      externalEntryConfigFromEnv({
-        EXTERNAL_ENTRY_ISSUER: "fihankra-dashboard",
-        EXTERNAL_ENTRY_SECRET: "entry-secret",
-        EXTERNAL_ENTRY_ALLOWED_SOURCES: "fihankra-feedback, other-source",
-        EXTERNAL_ENTRY_TOKEN_TTL_SECONDS: "120"
-      })
-    ).toEqual({
-      issuer: "fihankra-dashboard",
-      secret: "entry-secret",
-      allowedSourceKeys: ["fihankra-feedback", "other-source"],
-      tokenTtlSeconds: 120
-    });
-  });
+function configuredSources() {
+  return {
+    async findSourcesByKeys(sourceKeys: string[]) {
+      if (!sourceKeys.includes("fihankra-feedback")) {
+        return [];
+      }
 
+      return [
+        {
+          id: "source-fihankra",
+          key: "fihankra-feedback",
+          name: "Fihankra",
+          enabled: true,
+          secretHash: "intake-secret-hash",
+          config: {
+            externalEntry: {
+              enabled: true,
+              issuer: "fihankra-dashboard",
+              secret: "entry-secret",
+              tokenTtlSeconds: 300,
+              allowedModes: ["portal", "embed"],
+              allowedOrigins: ["https://analytics.example.com"]
+            }
+          }
+        }
+      ];
+    }
+  } as never;
+}
+
+describe("external entry service", () => {
   it("verifies signed HS256 tokens and filters to allowed source keys", () => {
     const result = verifyExternalEntryToken(
       signToken({ sourceKeys: ["fihankra-feedback", "untrusted-source"] }),
@@ -110,7 +123,7 @@ describe("external entry service", () => {
 
   it("authenticates only provisioned FeedApp users with matching product access", async () => {
     const service = createExternalEntryService({
-      config,
+      integrations: configuredSources(),
       now: () => now,
       users: {
         async getAppUserByEmail() {
@@ -128,7 +141,7 @@ describe("external entry service", () => {
 
   it("rejects pre-provisioned users without matching FeedApp product grants", async () => {
     const service = createExternalEntryService({
-      config,
+      integrations: configuredSources(),
       now: () => now,
       users: {
         async getAppUserByEmail() {
@@ -142,7 +155,7 @@ describe("external entry service", () => {
 
   it("rejects users who still need account activation", async () => {
     const service = createExternalEntryService({
-      config,
+      integrations: configuredSources(),
       now: () => now,
       users: {
         async getAppUserByEmail() {
@@ -152,5 +165,46 @@ describe("external entry service", () => {
     });
 
     await expect(service.authenticate(signToken())).resolves.toEqual({ ok: false, reason: "password-change-required" });
+  });
+
+  it("authenticates with product-source external entry config without environment config", async () => {
+    const service = createExternalEntryService({
+      integrations: {
+        async findSourcesByKeys() {
+          return [
+            {
+              id: "source-fihankra",
+              key: "fihankra-feedback",
+              name: "Fihankra",
+              enabled: true,
+              secretHash: "intake-secret-hash",
+              config: {
+                externalEntry: {
+                  enabled: true,
+                  issuer: "fihankra-dashboard",
+                  secret: "entry-secret",
+                  tokenTtlSeconds: 300,
+                  allowedModes: ["embed"],
+                  allowedOrigins: ["https://analytics.example.com"]
+                }
+              }
+            }
+          ];
+        }
+      } as never,
+      now: () => now,
+      users: {
+        async getAppUserByEmail() {
+          return makeUser();
+        }
+      } as never
+    });
+
+    await expect(service.authenticate(signToken(), "embed")).resolves.toEqual({
+      ok: true,
+      user: expect.objectContaining({ id: "user-fihankra" }),
+      sourceKeys: ["fihankra-feedback"]
+    });
+    await expect(service.authenticate(signToken(), "portal")).resolves.toEqual({ ok: false, reason: "source-not-allowed" });
   });
 });

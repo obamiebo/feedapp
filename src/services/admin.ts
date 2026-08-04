@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { canManageProductRoster } from "@/lib/access-control";
 import { hashIntegrationSecret } from "@/lib/integrations";
 import { normalizeKey } from "@/lib/keys";
-import { getProductCallbackConfig } from "@/repositories/integrations";
+import { getProductCallbackConfig, getProductExternalEntryConfig } from "@/repositories/integrations";
 import type { MessagingCadencePolicyRecord } from "@/repositories/messaging-cadence";
 import { createPrismaMessagingCadenceRepository } from "@/repositories/messaging-cadence";
 import type { AuditLogListFilters, AuditLogListRecord } from "@/repositories/audit-logs";
@@ -48,6 +48,11 @@ export type AdminProductSource = {
   eventCount: number;
   hasSecret: boolean;
   callbackConfigured: boolean;
+  externalEntryConfigured: boolean;
+  externalEntryIssuer: string | null;
+  externalEntryTokenTtlSeconds: number;
+  externalEntryAllowedOrigins: string[];
+  externalEntryAllowedModes: Array<"portal" | "embed">;
 };
 
 export type ProductRosterSource = AdminProductSource & {
@@ -182,6 +187,13 @@ export type CreateProductGroupInput = {
   description?: string;
 };
 
+export type UpdateProductGroupInput = {
+  groupId: string;
+  name: string;
+  description?: string;
+  productSourceIds: string[];
+};
+
 export type CreateProductSourceInput = {
   key: string;
   name: string;
@@ -215,6 +227,22 @@ export type ProductSecretResult = {
   secret: string;
 };
 
+export type ProductExternalEntrySecretResult = {
+  sourceId: string;
+  key: string;
+  entrySecret: string | null;
+};
+
+export type UpdateProductExternalEntryInput = {
+  sourceId: string;
+  enabled: boolean;
+  issuer: string;
+  tokenTtlSeconds: number;
+  allowedOrigins: string[];
+  allowedModes: Array<"portal" | "embed">;
+  rotateSecret?: boolean;
+};
+
 export type UpdateMessagingCadenceInput = {
   status: CaseStatus;
   priority: Priority;
@@ -229,6 +257,21 @@ export type UpdateSlaPolicyInput = {
   resolutionTargetHours: number;
   escalationTargetHours: number;
 };
+
+function configObject(config: Prisma.JsonValue): Record<string, Prisma.InputJsonValue> {
+  return config && typeof config === "object" && !Array.isArray(config)
+    ? ({ ...(config as Record<string, Prisma.InputJsonValue>) } as Record<string, Prisma.InputJsonValue>)
+    : {};
+}
+
+function normalizeAllowedModes(modes: Array<"portal" | "embed">) {
+  const unique = Array.from(new Set(modes.filter((mode) => mode === "portal" || mode === "embed")));
+  return unique.length > 0 ? unique : ["embed"];
+}
+
+function normalizeAllowedOrigins(origins: string[]) {
+  return Array.from(new Set(origins.map((origin) => origin.trim()).filter(Boolean)));
+}
 
 async function writeAuditLog(
   client: AuditWriter,
@@ -296,6 +339,7 @@ async function fetchProductSources(client: PrismaClient): Promise<AdminProductSo
 
   return productSources.map((source) => {
     const callbackConfig = getProductCallbackConfig(source.config);
+    const externalEntryConfig = getProductExternalEntryConfig(source.config);
 
     return {
       id: source.id,
@@ -308,7 +352,14 @@ async function fetchProductSources(client: PrismaClient): Promise<AdminProductSo
       lastError: source.lastError,
       eventCount: source._count.events,
       hasSecret: Boolean(source.secretHash),
-      callbackConfigured: Boolean(callbackConfig.url && callbackConfig.secret)
+      callbackConfigured: Boolean(callbackConfig.url && callbackConfig.secret),
+      externalEntryConfigured: Boolean(
+        externalEntryConfig.enabled && externalEntryConfig.issuer && externalEntryConfig.secret
+      ),
+      externalEntryIssuer: externalEntryConfig.issuer,
+      externalEntryTokenTtlSeconds: externalEntryConfig.tokenTtlSeconds,
+      externalEntryAllowedOrigins: externalEntryConfig.allowedOrigins,
+      externalEntryAllowedModes: externalEntryConfig.allowedModes
     };
   });
 }
@@ -397,10 +448,15 @@ export type AdminService = {
   createDepartment(input: CreateDepartmentInput, actorId?: string): Promise<void>;
   deleteDepartment(departmentId: string, actorId?: string): Promise<void>;
   createProductGroup(input: CreateProductGroupInput, actorId?: string): Promise<void>;
+  updateProductGroup(input: UpdateProductGroupInput, actorId?: string): Promise<void>;
   createProductSource(input: CreateProductSourceInput, actorId?: string): Promise<ProductSecretResult>;
   updateProductSource(input: UpdateProductSourceInput, actorId?: string): Promise<void>;
   rotateProductSourceSecret(sourceId: string, actorId?: string): Promise<ProductSecretResult>;
   updateProductSourceCallback(input: { sourceId: string; callbackUrl?: string; callbackSecret?: string }, actorId?: string): Promise<void>;
+  updateProductExternalEntry(
+    input: UpdateProductExternalEntryInput,
+    actorId?: string
+  ): Promise<ProductExternalEntrySecretResult>;
   addProductRosterUser(sourceId: string, email: string, actor: AppUser): Promise<void>;
   removeProductRosterUser(sourceId: string, userId: string, actor: AppUser): Promise<void>;
   createUser(input: CreateUserInput, actorId?: string): Promise<void>;
@@ -739,6 +795,56 @@ export function createAdminService(client: PrismaClient = prisma): AdminService 
       });
     },
 
+    async updateProductGroup(input, actorId) {
+      if (!input.groupId || input.name.trim().length < 2) {
+        throw new Error("Product group and name are required");
+      }
+
+      const selectedProductSourceIds = [...new Set(input.productSourceIds.filter(Boolean))];
+
+      const group = await client.$transaction(async (transaction) => {
+        const updatedGroup = await transaction.productGroup.update({
+          where: { id: input.groupId },
+          data: {
+            name: input.name.trim(),
+            description: input.description?.trim() || null
+          }
+        });
+
+        await transaction.integrationSource.updateMany({
+          where: {
+            groupId: input.groupId,
+            ...(selectedProductSourceIds.length > 0 ? { id: { notIn: selectedProductSourceIds } } : {})
+          },
+          data: {
+            groupId: null
+          }
+        });
+
+        if (selectedProductSourceIds.length > 0) {
+          await transaction.integrationSource.updateMany({
+            where: { id: { in: selectedProductSourceIds } },
+            data: {
+              groupId: input.groupId
+            }
+          });
+        }
+
+        return updatedGroup;
+      });
+
+      await writeAuditLog(client, {
+        actorId,
+        action: "admin.product_group_updated",
+        metadata: {
+          groupId: group.id,
+          key: group.key,
+          name: group.name,
+          productSourceIds: selectedProductSourceIds
+        }
+      });
+    },
+
     async createProductSource(input, actorId) {
       const key = normalizeKey(input.key || input.name);
 
@@ -997,6 +1103,77 @@ export function createAdminService(client: PrismaClient = prisma): AdminService 
           callbackConfigured: Boolean(callbackUrl && callbackSecret)
         }
       });
+    },
+
+    async updateProductExternalEntry(input, actorId) {
+      const source = await client.integrationSource.findUnique({
+        where: { id: input.sourceId },
+        select: { id: true, key: true, config: true }
+      });
+
+      if (!source) {
+        throw new Error("Product source was not found");
+      }
+
+      const nextConfig = configObject(source.config);
+      const currentEntryConfig = getProductExternalEntryConfig(source.config);
+      const issuer = input.issuer.trim();
+      const tokenTtlSeconds = Number.isFinite(input.tokenTtlSeconds) && input.tokenTtlSeconds > 0
+        ? Math.floor(input.tokenTtlSeconds)
+        : 300;
+      const allowedOrigins = normalizeAllowedOrigins(input.allowedOrigins);
+      const allowedModes = normalizeAllowedModes(input.allowedModes);
+      const shouldGenerateSecret = input.enabled && (!currentEntryConfig.secret || input.rotateSecret);
+      const entrySecret = shouldGenerateSecret ? `fe_embed_${randomBytes(24).toString("base64url")}` : null;
+
+      if (input.enabled) {
+        if (!issuer) {
+          throw new Error("External entry issuer is required");
+        }
+
+        nextConfig.externalEntry = {
+          enabled: true,
+          issuer,
+          secret: entrySecret ?? currentEntryConfig.secret,
+          tokenTtlSeconds,
+          allowedOrigins,
+          allowedModes
+        };
+      } else {
+        nextConfig.externalEntry = {
+          enabled: false,
+          issuer: issuer || currentEntryConfig.issuer || "",
+          tokenTtlSeconds,
+          allowedOrigins,
+          allowedModes
+        };
+      }
+
+      await client.integrationSource.update({
+        where: { id: source.id },
+        data: { config: nextConfig as Prisma.InputJsonObject }
+      });
+
+      await writeAuditLog(client, {
+        actorId,
+        action: "admin.product_source_external_entry_updated",
+        metadata: {
+          sourceId: source.id,
+          key: source.key,
+          enabled: input.enabled,
+          issuer: issuer || null,
+          secretRotated: Boolean(entrySecret),
+          tokenTtlSeconds,
+          allowedOriginCount: allowedOrigins.length,
+          allowedModes
+        }
+      });
+
+      return {
+        sourceId: source.id,
+        key: source.key,
+        entrySecret
+      };
     },
 
     async addProductRosterUser(sourceId, email, actor) {

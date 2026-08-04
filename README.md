@@ -124,7 +124,7 @@ Trusted product dashboards can also deep-link pre-provisioned FeedApp users with
 GET /external-entry?token=<signed-jwt>
 ```
 
-The external dashboard backend signs an `HS256` JWT using `EXTERNAL_ENTRY_SECRET`. Required claims:
+Admins configure per-product external entry in `Settings > Products > Manage source > Embedded access`. The external dashboard backend signs an `HS256` JWT using the one-time entry signing secret generated for that product source. Required claims:
 
 ```json
 {
@@ -146,7 +146,11 @@ For an embedded product dashboard tab, pass `mode=embed`:
 GET /external-entry?token=<signed-jwt>&mode=embed
 ```
 
-Embed mode uses the same FeedApp session, RBAC, and product-scope checks, but renders the app with compact dashboard chrome instead of the standalone sidebar. Configure `EMBED_ALLOWED_ORIGINS` with a comma-separated list of product dashboard origins that are allowed to frame FeedApp.
+Embed mode uses the same FeedApp session, RBAC, and product-scope checks, but renders the app with compact dashboard chrome instead of the standalone sidebar.
+
+Admins can enable or disable signed external entry per product source, set the expected issuer, token TTL, allowed destinations, and allowed iframe origins. This configuration generates a separate one-time entry signing secret for the product dashboard backend. The entry secret is distinct from the product intake secret and the product callback signing secret.
+
+Configure `EMBED_ALLOWED_ORIGINS` with a comma-separated deployment allow-list of product dashboard origins that may frame FeedApp. Per-product allowed origins are stored with the product settings for operational clarity, while the deployment CSP allow-list is enforced through `EMBED_ALLOWED_ORIGINS`.
 
 ## Architecture Direction
 

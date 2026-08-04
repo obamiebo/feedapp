@@ -22,6 +22,129 @@ The current implementation is a database-backed Next.js/React internal operation
 
 ## Latest Session
 
+Date: 2026-08-04
+
+### 2026-08-04 - Product Settings Dialog UX
+
+Date: 2026-08-04
+
+Summary:
+
+- Reworked `Settings > Products` so product roster management, product source creation, and source administration are easier to scan from the main sections.
+- Moved the `Add rep` action into the Product reps section header next to the selected product dropdown.
+- Changed rep assignment into a centered dialog that lets admins select from provisioned users while preserving email-based entry for scoped non-admin roster managers.
+- Moved `Add product source` and `Manage source` into the Product sources section header.
+- Moved `Add product group` into the Product groups section header and changed product-group creation into a centered dialog.
+- Replaced the product-group add-only dialog with a unified `Manage product groups` dialog.
+- Added product-group dialog tabs for creating a new group and managing an existing group.
+- Added product-group management support for renaming the group display name, updating its description, and assigning/removing product sources from the group while keeping group keys immutable.
+- Consolidated source details, intake secret rotation, status callback configuration, and embedded access configuration into one centered `Manage source` dialog.
+- Changed the source selector inside the `Manage source` dialog to use client-side state so switching products does not refresh the whole settings page.
+- Removed the legacy environment-based external-entry fallback so trusted external entry is configured only through per-product admin settings.
+- Renamed the embedded access enablement checkbox to `Enable signed external entry` and clarified entry modes as `Allowed destinations`.
+- Used segmented tabs with separate forms and submit buttons so each source-management action can continue to map cleanly to its own server action.
+- Kept callback and embedded-entry access management inside the source management dialog without duplicating existing source-management logic.
+
+Files changed:
+
+- `src/app/settings/products/page.tsx`
+- `src/components/manage-product-source-dialog.tsx`
+- `src/components/product-group-dialog.tsx`
+- `src/components/product-roster-user-dialog.tsx`
+- `src/services/admin.ts`
+- `src/services/external-entry.ts`
+- `.env.example`
+- `README.md`
+- `tests/admin-service.test.ts`
+- `tests/external-entry-service.test.ts`
+- `summary.md`
+
+Verification:
+
+- `npm run typecheck`: passed.
+- `npx vitest run tests/admin-service.test.ts`: passed, 20 tests.
+- `npx vitest run tests/external-entry-service.test.ts tests/external-entry-route.test.ts`: passed, 9 tests.
+- `npm run lint`: passed.
+- `npm test`: passed, 137 tests.
+- `npm run build:verify`: passed.
+
+### 2026-08-04 - Admin-Managed Embedded Entry Settings
+
+Date: 2026-08-04
+
+Summary:
+
+- Added per-product embedded dashboard entry configuration under `Settings > Products`.
+- Kept embedded entry secrets separate from product intake secrets and product callback signing secrets.
+- Added admin controls to enable trusted entry, set issuer, token TTL, allowed iframe origins, allowed entry modes, and generate or rotate the one-time entry signing secret.
+- Stored embedded entry settings in `IntegrationSource.config.externalEntry`, matching the existing product callback config pattern.
+- Extended external-entry authentication to verify DB-backed per-product HS256 entry configs before falling back to the legacy/global `EXTERNAL_ENTRY_*` environment config.
+- Enforced configured entry modes so a product can allow embed-only, portal-only, or both.
+- Added product-source table visibility for embedded entry status.
+- Updated README and `.env.example` to document per-product embedded entry settings and the deployment-level iframe allow-list.
+- Added regression coverage for admin-managed embedded entry config and DB-backed external-entry verification.
+
+Files changed:
+
+- `.env.example`
+- `README.md`
+- `src/app/settings/products/page.tsx`
+- `src/repositories/integrations.ts`
+- `src/services/admin.ts`
+- `src/services/external-entry.ts`
+- `tests/admin-service.test.ts`
+- `tests/case-service.test.ts`
+- `tests/external-entry-route.test.ts`
+- `tests/external-entry-service.test.ts`
+- `tests/ingestion-service.test.ts`
+- `summary.md`
+
+Verification:
+
+- `npm run typecheck`: passed.
+- `npm test`: passed, 137 tests.
+
+### 2026-08-04 - Embedded Product Dashboard Access
+
+Date: 2026-08-04
+
+Summary:
+
+- Added explicit external-entry embed mode with `mode=embed`, keeping the existing portal mode as the default.
+- Added entry-context cookies so FeedApp can render embedded chrome after trusted external entry without changing the existing RBAC or product-scope enforcement.
+- Added `/embed` as a stable embedded landing route and `/embed/exit` as the "Open full FeedApp" escape hatch.
+- Updated the shared `AppShell` to reuse existing dashboard, case, and settings pages while switching to compact embedded chrome when the session is in embed mode.
+- Removed redundant embedded top-bar Cases/Settings navigation and standalone settings gear, leaving product scope, full-portal action, and the avatar menu.
+- Kept full FeedApp sidebar sign-out available in portal mode and kept embed sign-out available from the avatar menu.
+- Improved the external-entry error page with branded, reason-specific messaging for expired, invalid, unprovisioned, and unauthorized trusted-entry links.
+- Added iframe allow-list support through `EMBED_ALLOWED_ORIGINS`, emitting a `frame-ancestors` CSP when configured.
+- Updated external-entry route tests, README guidance, and `.env.example` for embedded access.
+
+Files changed:
+
+- `README.md`
+- `.env.example`
+- `next.config.mjs`
+- `src/app/actions/auth.ts`
+- `src/app/change-password/page.tsx`
+- `src/app/embed/page.tsx`
+- `src/app/embed/exit/route.ts`
+- `src/app/external-entry/error/page.tsx`
+- `src/app/external-entry/route.ts`
+- `src/app/login/page.tsx`
+- `src/components/app-shell.tsx`
+- `src/lib/session-cookie.ts`
+- `tests/external-entry-route.test.ts`
+- `summary.md`
+
+Verification:
+
+- `npm run typecheck`: passed.
+- `npm test`: passed, 135 tests.
+- `npm run build:verify`: passed.
+
+## Previous Sessions
+
 Date: 2026-07-29
 
 ### 2026-07-29 - Product Onboarding Manager Requirement

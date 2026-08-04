@@ -69,6 +69,7 @@ function makeService() {
     },
     integrations: {
       findSourceByKey: vi.fn().mockResolvedValue(source),
+      findSourcesByKeys: vi.fn().mockResolvedValue([]),
       listProductSources: vi.fn().mockResolvedValue([]),
       listProductGroups: vi.fn().mockResolvedValue([]),
       updateSourceCallbackConfig: vi.fn(),

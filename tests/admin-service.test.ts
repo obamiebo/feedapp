@@ -9,6 +9,9 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
   const createdDepartments: Array<{ key: string; name: string }> = [];
   const deletedDepartments: unknown[] = [];
   const createdProductSources: Array<unknown> = [];
+  const updatedProductSources: Array<unknown> = [];
+  const updatedProductSourceBatches: Array<unknown> = [];
+  const updatedProductGroups: Array<unknown> = [];
   const createdUsers: Array<unknown> = [];
   const roleDeletes: unknown[] = [];
   const roleCreates: unknown[] = [];
@@ -166,11 +169,26 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
           return {
             id: "source-commerce-platform",
             key: "commerce-platform",
-            name: "Commerce Platform"
+            name: "Commerce Platform",
+            config: {}
           };
         }
 
         return null;
+      },
+      async update(input: unknown) {
+        updatedProductSources.push(input);
+        return {
+          id: "source-commerce-platform",
+          key: "commerce-platform",
+          name: "Commerce Platform",
+          groupId: "group-commerce",
+          enabled: true
+        };
+      },
+      async updateMany(input: unknown) {
+        updatedProductSourceBatches.push(input);
+        return { count: 1 };
       },
       async findMany() {
         return [
@@ -191,6 +209,15 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
       }
     },
     productGroup: {
+      async update(input: unknown) {
+        updatedProductGroups.push(input);
+        return {
+          id: "group-commerce",
+          key: "commerce",
+          name: "Commerce Products",
+          description: "Updated commerce products"
+        };
+      },
       async findMany() {
         return [
           {
@@ -315,6 +342,9 @@ function makeClient(options: { hasDepartment?: boolean } = {}) {
     createdDepartments,
     deletedDepartments,
     createdProductSources,
+    updatedProductSources,
+    updatedProductSourceBatches,
+    updatedProductGroups,
     createdUsers,
     cadenceUpserts,
     membershipCreates,
@@ -475,6 +505,57 @@ describe("admin service", () => {
     ]);
   });
 
+  it("updates product group details and product membership", async () => {
+    const { auditLogs, client, updatedProductGroups, updatedProductSourceBatches } = makeClient();
+
+    await createAdminService(client as never).updateProductGroup(
+      {
+        groupId: "group-commerce",
+        name: "Commerce Products",
+        description: "Updated commerce products",
+        productSourceIds: ["source-commerce-platform", "source-support-portal"]
+      },
+      "user-admin"
+    );
+
+    expect(updatedProductGroups).toEqual([
+      {
+        where: { id: "group-commerce" },
+        data: {
+          name: "Commerce Products",
+          description: "Updated commerce products"
+        }
+      }
+    ]);
+    expect(updatedProductSourceBatches).toEqual([
+      {
+        where: {
+          groupId: "group-commerce",
+          id: { notIn: ["source-commerce-platform", "source-support-portal"] }
+        },
+        data: {
+          groupId: null
+        }
+      },
+      {
+        where: { id: { in: ["source-commerce-platform", "source-support-portal"] } },
+        data: {
+          groupId: "group-commerce"
+        }
+      }
+    ]);
+    expect(auditLogs).toContainEqual(
+      expect.objectContaining({
+        action: "admin.product_group_updated",
+        metadata: expect.objectContaining({
+          groupId: "group-commerce",
+          key: "commerce",
+          productSourceIds: ["source-commerce-platform", "source-support-portal"]
+        })
+      })
+    );
+  });
+
   it("requires a routing department before creating product sources", async () => {
     const { client, createdProductSources, productAccessCreates } = makeClient({ hasDepartment: false });
 
@@ -496,6 +577,56 @@ describe("admin service", () => {
 
     expect(createdProductSources).toEqual([]);
     expect(productAccessCreates).toEqual([]);
+  });
+
+  it("configures embedded dashboard entry separately from intake secrets", async () => {
+    const { auditLogs, client, updatedProductSources } = makeClient();
+
+    const result = await createAdminService(client as never).updateProductExternalEntry(
+      {
+        sourceId: "source-commerce-platform",
+        enabled: true,
+        issuer: "commerce-dashboard",
+        tokenTtlSeconds: 300,
+        allowedOrigins: ["https://analytics.example.com", "https://analytics.example.com"],
+        allowedModes: ["embed"],
+        rotateSecret: true
+      },
+      "user-admin"
+    );
+
+    expect(result).toEqual({
+      sourceId: "source-commerce-platform",
+      key: "commerce-platform",
+      entrySecret: expect.stringMatching(/^fe_embed_/)
+    });
+    expect(updatedProductSources).toEqual([
+      expect.objectContaining({
+        where: { id: "source-commerce-platform" },
+        data: {
+          config: expect.objectContaining({
+            externalEntry: expect.objectContaining({
+              enabled: true,
+              issuer: "commerce-dashboard",
+              secret: expect.stringMatching(/^fe_embed_/),
+              tokenTtlSeconds: 300,
+              allowedOrigins: ["https://analytics.example.com"],
+              allowedModes: ["embed"]
+            })
+          })
+        }
+      })
+    ]);
+    expect(auditLogs).toContainEqual(
+      expect.objectContaining({
+        action: "admin.product_source_external_entry_updated",
+        metadata: expect.objectContaining({
+          key: "commerce-platform",
+          enabled: true,
+          secretRotated: true
+        })
+      })
+    );
   });
 
   it("creates product sources with a new initial product manager", async () => {
