@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PasswordInput } from "@/components/ui/password-input";
 import { PendingSubmitButton } from "@/components/ui/pending-submit-button";
 import { resolveCurrentUser } from "@/lib/current-user";
-import { setSessionCookie } from "@/lib/session-cookie";
+import { clearEntryContext, setSessionCookie } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ async function loginAction(formData: FormData) {
   }
 
   await setSessionCookie(result.token, result.expiresAt);
+  await clearEntryContext();
 
   if (result.user.passwordMustChange) {
     redirect("/change-password");

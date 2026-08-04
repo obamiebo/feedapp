@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { clearSessionCookie, getSessionToken } from "@/lib/session-cookie";
+import { clearEntryContext, clearSessionCookie, getSessionToken } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 
 export async function logoutAction() {
@@ -12,5 +12,6 @@ export async function logoutAction() {
   }
 
   await clearSessionCookie();
+  await clearEntryContext();
   redirect("/login");
 }

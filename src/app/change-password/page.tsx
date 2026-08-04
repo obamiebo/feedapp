@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PasswordInput } from "@/components/ui/password-input";
 import { PendingSubmitButton } from "@/components/ui/pending-submit-button";
 import { resolveCurrentUser } from "@/lib/current-user";
-import { getSessionToken, setSessionCookie } from "@/lib/session-cookie";
+import { clearEntryContext, getSessionToken, setSessionCookie } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +43,7 @@ async function changePasswordAction(formData: FormData) {
 
   const nextSession = await authService.createSession(currentUser.id);
   await setSessionCookie(nextSession.token, nextSession.expiresAt);
+  await clearEntryContext();
   revalidatePath("/", "layout");
   revalidatePath("/change-password");
 

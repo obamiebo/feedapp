@@ -140,6 +140,14 @@ The external dashboard backend signs an `HS256` JWT using `EXTERNAL_ENTRY_SECRET
 
 FeedApp verifies the signature, issuer, expiry, allowed source keys, and the pre-provisioned user's FeedApp product grants before creating a session.
 
+For an embedded product dashboard tab, pass `mode=embed`:
+
+```text
+GET /external-entry?token=<signed-jwt>&mode=embed
+```
+
+Embed mode uses the same FeedApp session, RBAC, and product-scope checks, but renders the app with compact dashboard chrome instead of the standalone sidebar. Configure `EMBED_ALLOWED_ORIGINS` with a comma-separated list of product dashboard origins that are allowed to frame FeedApp.
+
 ## Architecture Direction
 
 The first production version should remain a modular monolith with clear module boundaries. Use managed Postgres, a queue/worker runtime, object storage, first-party email/password authentication with app provisioning, provider adapters for email/SMS, and REST/webhook ingestion for external systems. Keep SSO optional for a later company identity-provider integration.

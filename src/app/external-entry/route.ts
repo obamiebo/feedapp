@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { setSessionCookie } from "@/lib/session-cookie";
+import { setEntryContext, setSessionCookie, type EntryMode } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 import { createExternalEntryService } from "@/services/external-entry";
 
@@ -10,6 +10,8 @@ function externalEntryErrorUrl(request: Request, reason: string) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const token = url.searchParams.get("token");
+  const requestedMode = url.searchParams.get("mode");
+  const mode: EntryMode = requestedMode === "embed" ? "embed" : "portal";
   const result = await createExternalEntryService().authenticate(token);
 
   if (!result.ok) {
@@ -18,6 +20,10 @@ export async function GET(request: Request) {
 
   const session = await createAuthService().createSession(result.user.id);
   await setSessionCookie(session.token, session.expiresAt);
+  await setEntryContext({ mode, sourceSystem: result.sourceKeys[0], expiresAt: session.expiresAt });
 
-  return NextResponse.redirect(new URL(`/?sourceSystem=${encodeURIComponent(result.sourceKeys[0])}`, request.url));
+  const destinationPath = mode === "embed" ? "/embed" : "/";
+  return NextResponse.redirect(
+    new URL(`${destinationPath}?sourceSystem=${encodeURIComponent(result.sourceKeys[0])}`, request.url)
+  );
 }
