@@ -13,6 +13,11 @@ export default async function EmbedLandingPage({
   const sourceSystem = Array.isArray(sourceSystemParam) ? sourceSystemParam[0] : sourceSystemParam;
   const entryContext = await getEntryContext();
   const scopedSource = sourceSystem || entryContext.sourceSystem;
+  const params = new URLSearchParams({ entryMode: "embed" });
 
-  redirect(scopedSource ? `/?sourceSystem=${encodeURIComponent(scopedSource)}` : "/");
+  if (scopedSource) {
+    params.set("sourceSystem", scopedSource);
+  }
+
+  redirect(`/?${params.toString()}`);
 }

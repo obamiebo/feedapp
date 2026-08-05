@@ -7,7 +7,7 @@ import { logoutAction } from "@/app/actions/auth";
 import type { AppUser } from "@/domain/types";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/cn";
-import { getEntryContext } from "@/lib/session-cookie";
+import { getEntryContext, type EntryMode } from "@/lib/session-cookie";
 import { visibleSettingsHrefs } from "@/lib/settings-access";
 
 export type NavKey = "cases" | "settings";
@@ -189,17 +189,23 @@ function EmbeddedShell({
 export async function AppShell({
   active,
   children,
-  currentUser
+  currentUser,
+  entryMode,
+  sourceSystem
 }: {
   active: NavKey;
   children: ReactNode;
   currentUser?: AppUser | null;
+  entryMode?: EntryMode;
+  sourceSystem?: string;
 }) {
   const entryContext = await getEntryContext();
+  const effectiveMode = entryMode ?? entryContext.mode;
+  const effectiveSourceSystem = sourceSystem ?? entryContext.sourceSystem;
 
-  if (entryContext.mode === "embed") {
+  if (effectiveMode === "embed") {
     return (
-      <EmbeddedShell currentUser={currentUser} sourceSystem={entryContext.sourceSystem}>
+      <EmbeddedShell currentUser={currentUser} sourceSystem={effectiveSourceSystem}>
         {children}
       </EmbeddedShell>
     );

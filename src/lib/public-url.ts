@@ -17,3 +17,8 @@ function publicAppOrigin() {
 export function appUrl(path: string, requestUrl: string | URL) {
   return new URL(path, publicAppOrigin() ?? requestUrl);
 }
+
+export function appRedirectLocation(path: string) {
+  const origin = publicAppOrigin();
+  return origin ? new URL(path, origin).toString() : path;
+}

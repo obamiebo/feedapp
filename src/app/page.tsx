@@ -58,7 +58,7 @@ function parsePage(searchParams: DashboardSearchParams) {
   return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
-function paginationHref(filters: CaseListFilters, page: number): Route {
+function paginationHref(filters: CaseListFilters, page: number, embedMode = false): Route {
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(filters)) {
@@ -71,7 +71,26 @@ function paginationHref(filters: CaseListFilters, page: number): Route {
     params.set("page", String(page));
   }
 
+  if (embedMode) {
+    params.set("entryMode", "embed");
+  }
+
   return `/?${params.toString()}` as Route;
+}
+
+function caseDetailHref(caseId: string, filters: CaseListFilters, embedMode: boolean): Route {
+  const params = new URLSearchParams();
+
+  if (filters.sourceSystem) {
+    params.set("sourceSystem", filters.sourceSystem);
+  }
+
+  if (embedMode) {
+    params.set("entryMode", "embed");
+  }
+
+  const query = params.toString();
+  return `/cases/${caseId}${query ? `?${query}` : ""}` as Route;
 }
 
 function activeFilterCount(filters: CaseListFilters) {
@@ -113,6 +132,7 @@ function formatDate(value: Date) {
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<DashboardSearchParams> }) {
   const resolvedSearchParams = await searchParams;
   const filters = parseFilters(resolvedSearchParams);
+  const embedMode = firstParam(resolvedSearchParams, "entryMode") === "embed";
   const page = parsePage(resolvedSearchParams);
   const currentUser = await resolveCurrentUser();
 
@@ -126,7 +146,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   if (!canEnterApplication(currentUser)) {
     return (
-      <AppShell active="cases" currentUser={currentUser}>
+      <AppShell active="cases" currentUser={currentUser} entryMode={embedMode ? "embed" : undefined} sourceSystem={filters.sourceSystem}>
         <main className="flex flex-col gap-6">
           <PageHeader eyebrow={greeting(new Date())} title="Case operations" />
           <section className="rounded-lg border border-line bg-panel p-6 shadow-sm">
@@ -179,6 +199,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <span className="text-xs text-muted">{filterCount} active</span>
       </div>
       <form className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" action="/" method="get">
+        {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
         <label className="flex flex-col gap-1 text-sm text-muted">
           Search
           <input
@@ -280,7 +301,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="flex items-end gap-2">
           <Link
             className="inline-flex items-center rounded-md border border-line bg-panel px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-            href="/"
+            href={embedMode ? "/?entryMode=embed" : "/"}
           >
             Reset
           </Link>
@@ -296,7 +317,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   );
 
   return (
-    <AppShell active="cases" currentUser={currentUser}>
+    <AppShell active="cases" currentUser={currentUser} entryMode={embedMode ? "embed" : undefined} sourceSystem={filters.sourceSystem}>
       <PageHeader
         eyebrow="Internal case operations"
         title={`${greeting()}, ${firstName}`}
@@ -312,7 +333,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             {canCreateCase(currentUser) ? (
               <Link
                 className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark"
-                href="/cases/new"
+                href={embedMode ? "/cases/new?entryMode=embed" : "/cases/new"}
               >
                 <MessageSquare size={16} /> New case
               </Link>
@@ -409,7 +430,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     }
                   ]}
                   rows={cases}
-                  rowHref={(item) => `/cases/${item.id}` as Route}
+                  rowHref={(item) => caseDetailHref(item.id, filters, embedMode)}
                   getRowKey={(item) => item.id}
                   emptyIcon={Inbox}
                   emptyMessage="No cases yet."
@@ -424,7 +445,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     {casePage.page > 1 ? (
                       <Link
                         className="inline-flex items-center gap-1 rounded-md border border-line bg-panel px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-                        href={paginationHref(filters, casePage.page - 1)}
+                        href={paginationHref(filters, casePage.page - 1, embedMode)}
                       >
                         <ChevronLeft size={14} /> Previous
                       </Link>
@@ -436,7 +457,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     {casePage.page < casePage.pageCount ? (
                       <Link
                         className="inline-flex items-center gap-1 rounded-md border border-line bg-panel px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
-                        href={paginationHref(filters, casePage.page + 1)}
+                        href={paginationHref(filters, casePage.page + 1, embedMode)}
                       >
                         Next <ChevronRight size={14} />
                       </Link>
@@ -475,7 +496,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                           return (
                             <Link
                               className="rounded-md border border-line p-3 text-sm transition-colors hover:bg-panel-muted"
-                              href={`/cases/${approval.caseId}`}
+                              href={caseDetailHref(approval.caseId, filters, embedMode)}
                               key={approval.id}
                             >
                               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -515,7 +536,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         {sortedStalePrompts.slice(0, 3).map((prompt) => (
                           <Link
                             className="rounded-md border border-line p-3 text-sm transition-colors hover:bg-panel-muted"
-                            href={`/cases/${prompt.caseId}`}
+                            href={caseDetailHref(prompt.caseId, filters, embedMode)}
                             key={prompt.id}
                           >
                             <div className="mb-2 flex flex-wrap items-center gap-2">

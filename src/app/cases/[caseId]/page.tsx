@@ -1,4 +1,5 @@
 import { CheckCircle2, ClipboardList, History, KeyRound, Send, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
@@ -19,6 +20,7 @@ import {
   canRequestCustomerReplyApproval,
   canTransitionCase
 } from "@/lib/access-control";
+import { appRedirectLocation } from "@/lib/public-url";
 import { resolveCurrentUser } from "@/lib/current-user";
 import { isSlaAtRisk, isSlaBreached } from "@/lib/sla";
 import { customerReplyApprovalSchema, internalNoteSchema } from "@/lib/validation";
@@ -63,6 +65,47 @@ function approvalKind(approvalId: string, auditLogs: Array<{ action: string; met
     : { label: "Customer reply", tone: "neutral" as const };
 }
 
+function firstParam(searchParams: Record<string, string | string[] | undefined>, key: string) {
+  const value = searchParams[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function caseDetailHref(caseId: string, sourceSystem?: string, embedMode = false): Route {
+  const params = new URLSearchParams();
+
+  if (sourceSystem) {
+    params.set("sourceSystem", sourceSystem);
+  }
+
+  if (embedMode) {
+    params.set("entryMode", "embed");
+  }
+
+  const query = params.toString();
+  return `/cases/${caseId}${query ? `?${query}` : ""}` as Route;
+}
+
+function dashboardHref(sourceSystem?: string, embedMode = false): Route {
+  const params = new URLSearchParams();
+
+  if (sourceSystem) {
+    params.set("sourceSystem", sourceSystem);
+  }
+
+  if (embedMode) {
+    params.set("entryMode", "embed");
+  }
+
+  const query = params.toString();
+  return `/${query ? `?${query}` : ""}` as Route;
+}
+
+function redirectToCaseFromForm(formData: FormData, caseId: string) {
+  const sourceSystem = String(formData.get("sourceSystem") ?? "") || undefined;
+  const embedMode = formData.get("entryMode") === "embed";
+  redirect(appRedirectLocation(caseDetailHref(caseId, sourceSystem, embedMode)) as Parameters<typeof redirect>[0]);
+}
+
 async function transitionCaseAction(formData: FormData) {
   "use server";
 
@@ -81,7 +124,7 @@ async function transitionCaseAction(formData: FormData) {
   await createCaseService().transitionCaseForUser(caseId, status as CaseStatus, currentUser);
   revalidatePath("/");
   revalidatePath(`/cases/${caseId}`);
-  redirect(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
 }
 
 async function assignCaseAction(formData: FormData) {
@@ -104,7 +147,7 @@ async function assignCaseAction(formData: FormData) {
   await createCaseService().assignCaseForUser(caseId, assigneeId, departmentId, currentUser);
   revalidatePath("/");
   revalidatePath(`/cases/${caseId}`);
-  redirect(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
 }
 
 async function addInternalNoteAction(formData: FormData) {
@@ -126,7 +169,7 @@ async function addInternalNoteAction(formData: FormData) {
 
   await createCaseService().addInternalNoteForUser(parsed.data.caseId, parsed.data.body, currentUser);
   revalidatePath(`/cases/${parsed.data.caseId}`);
-  redirect(`/cases/${parsed.data.caseId}`);
+  redirectToCaseFromForm(formData, parsed.data.caseId);
 }
 
 async function requestCustomerReplyApprovalAction(formData: FormData) {
@@ -172,7 +215,7 @@ async function requestCustomerReplyApprovalAction(formData: FormData) {
   }
 
   revalidatePath(`/cases/${parsed.data.caseId}`);
-  redirect(`/cases/${parsed.data.caseId}`);
+  redirectToCaseFromForm(formData, parsed.data.caseId);
 }
 
 async function dismissRecommendationAction(formData: FormData) {
@@ -199,7 +242,7 @@ async function dismissRecommendationAction(formData: FormData) {
     currentUser
   );
   revalidatePath(`/cases/${caseId}`);
-  redirect(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
 }
 
 async function dismissCustomerReplySuggestionAction(formData: FormData) {
@@ -219,7 +262,7 @@ async function dismissCustomerReplySuggestionAction(formData: FormData) {
   await createCaseService().dismissCustomerReplySuggestionForUser(caseId, currentUser);
   revalidatePath("/");
   revalidatePath(`/cases/${caseId}`);
-  redirect(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
 }
 
 async function approveCustomerReplyAction(formData: FormData) {
@@ -240,7 +283,7 @@ async function approveCustomerReplyAction(formData: FormData) {
 
   await createCaseService().approveCustomerReplyForUser(approvalId, currentUser, reviewedBody || undefined);
   revalidatePath(`/cases/${caseId}`);
-  redirect(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
 }
 
 async function rejectCustomerReplyAction(formData: FormData) {
@@ -260,7 +303,7 @@ async function rejectCustomerReplyAction(formData: FormData) {
 
   await createCaseService().rejectCustomerReplyForUser(approvalId, currentUser);
   revalidatePath(`/cases/${caseId}`);
-  redirect(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
 }
 
 function formatDate(value?: Date | null) {
@@ -280,7 +323,9 @@ export default async function CaseDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { caseId } = await params;
-  void (await searchParams);
+  const resolvedSearchParams = await searchParams;
+  const sourceSystemParam = firstParam(resolvedSearchParams, "sourceSystem") || undefined;
+  const embedMode = firstParam(resolvedSearchParams, "entryMode") === "embed";
   const currentUser = await resolveCurrentUser();
 
   if (!currentUser) {
@@ -293,8 +338,13 @@ export default async function CaseDetailPage({
 
   if (!canEnterApplication(currentUser)) {
     return (
-      <AppShell active="cases" currentUser={currentUser}>
-        <PageHeader breadcrumbHref="/" breadcrumbLabel="Back to cases" eyebrow="Access required" title="Case unavailable" />
+      <AppShell active="cases" currentUser={currentUser} entryMode={embedMode ? "embed" : undefined} sourceSystem={sourceSystemParam}>
+        <PageHeader
+          breadcrumbHref={dashboardHref(sourceSystemParam, embedMode)}
+          breadcrumbLabel="Back to cases"
+          eyebrow="Access required"
+          title="Case unavailable"
+        />
         <section className="rounded-lg border border-line bg-panel p-6 shadow-sm">
           <EmptyState icon={ShieldCheck} message="This user is not provisioned for application access." />
         </section>
@@ -311,9 +361,9 @@ export default async function CaseDetailPage({
 
   if (caseAccess.status === "forbidden") {
     return (
-      <AppShell active="cases" currentUser={currentUser}>
+      <AppShell active="cases" currentUser={currentUser} entryMode={embedMode ? "embed" : undefined} sourceSystem={sourceSystemParam}>
         <PageHeader
-          breadcrumbHref="/"
+          breadcrumbHref={dashboardHref(sourceSystemParam, embedMode)}
           breadcrumbLabel="Back to dashboard"
           eyebrow="Case access"
           title="Case access unavailable"
@@ -333,7 +383,7 @@ export default async function CaseDetailPage({
                 <Link className={secondaryButtonClass} href="/settings/team">
                   View access
                 </Link>
-                <Link className={primaryButtonClass} href="/">
+                <Link className={primaryButtonClass} href={dashboardHref(sourceSystemParam, embedMode)}>
                   Back to dashboard
                 </Link>
               </div>
@@ -387,9 +437,9 @@ export default async function CaseDetailPage({
   const nestedCardClass = "rounded-md border border-[#c3d1e3] p-3";
 
   return (
-    <AppShell active="cases" currentUser={currentUser}>
+    <AppShell active="cases" currentUser={currentUser} entryMode={embedMode ? "embed" : undefined} sourceSystem={sourceSystemParam ?? caseDetail.sourceSystem}>
       <PageHeader
-        breadcrumbHref="/"
+        breadcrumbHref={dashboardHref(sourceSystemParam ?? caseDetail.sourceSystem, embedMode)}
         breadcrumbLabel="Back to cases"
         eyebrow={caseDetail.sourceSystem}
         title={caseDetail.title}
@@ -472,6 +522,8 @@ export default async function CaseDetailPage({
                       <form className="flex flex-col gap-3">
                         <input name="approvalId" type="hidden" value={approval.id} />
                         <input name="caseId" type="hidden" value={caseDetail.id} />
+                        <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                        {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
                         <textarea
                           name="reviewedBody"
                           defaultValue={approval.draftBody}
@@ -551,6 +603,8 @@ export default async function CaseDetailPage({
                     {canRequestReplyApproval && currentUser ? (
                       <form className="flex flex-col gap-3">
                         <input name="caseId" type="hidden" value={caseDetail.id} />
+                        <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                        {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
                         <input name="recommendationId" type="hidden" value={recommendation.id} />
                         <input name="recommendationProductName" type="hidden" value={recommendation.productName} />
                         <label className="flex flex-col gap-1 text-sm text-muted" htmlFor={`recommendation-channel-${recommendation.id}`}>
@@ -615,6 +669,8 @@ export default async function CaseDetailPage({
                 {canRequestReplyApproval && currentUser ? (
                   <form className="flex flex-col gap-3">
                     <input name="caseId" type="hidden" value={caseDetail.id} />
+                    <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                    {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
                     <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="channel">
                       Channel
                       <select id="channel" name="channel" defaultValue="Email" className={inputClass}>
@@ -661,6 +717,8 @@ export default async function CaseDetailPage({
             {canAddNote && currentUser ? (
               <form action={addInternalNoteAction} className="flex flex-col gap-3">
                 <input name="caseId" type="hidden" value={caseDetail.id} />
+                <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
                 <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="body">
                   Internal note
                   <textarea
@@ -692,6 +750,8 @@ export default async function CaseDetailPage({
             <div className="flex flex-col gap-4 p-5">
               <form action={transitionCaseAction} className="flex flex-col gap-2">
                 <input name="caseId" type="hidden" value={caseDetail.id} />
+                <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
                 {permittedTransitions.length > 0 ? (
                   <>
                     <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="status">
@@ -719,6 +779,8 @@ export default async function CaseDetailPage({
                 <form action={assignCaseAction} className="flex flex-col gap-2 border-t border-line pt-4">
                   <input name="caseId" type="hidden" value={caseDetail.id} />
                   <input name="departmentId" type="hidden" value={caseDetail.departmentId} />
+                  <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                  {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
                   <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="assigneeId">
                     Assignee
                     <select
