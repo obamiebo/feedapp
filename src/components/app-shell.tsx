@@ -17,12 +17,21 @@ const NAV_ITEMS: Array<{ key: NavKey; href: Route; label: string; icon: LucideIc
   { key: "settings", href: "/settings", label: "Settings", icon: Settings }
 ];
 
-function sourceHref(href: Route, sourceSystem?: string): Route {
-  if (!sourceSystem) {
+function sourceHref(href: Route, sourceSystem?: string, entryMode?: EntryMode): Route {
+  if (!sourceSystem && entryMode !== "embed") {
     return href;
   }
 
-  const params = new URLSearchParams({ sourceSystem });
+  const params = new URLSearchParams();
+
+  if (sourceSystem) {
+    params.set("sourceSystem", sourceSystem);
+  }
+
+  if (entryMode === "embed") {
+    params.set("entryMode", "embed");
+  }
+
   return `${href}?${params.toString()}` as Route;
 }
 
@@ -42,11 +51,13 @@ function NavLinks({
   active,
   orientation,
   sourceSystem,
+  entryMode,
   currentUser
 }: {
   active: NavKey;
   orientation: "vertical" | "horizontal";
   sourceSystem?: string;
+  entryMode?: EntryMode;
   currentUser?: AppUser | null;
 }) {
   const items =
@@ -59,7 +70,7 @@ function NavLinks({
       {items.map(({ key, href, label, icon: Icon }) => (
         <Link
           key={key}
-          href={sourceHref(href, sourceSystem)}
+          href={sourceHref(href, sourceSystem, entryMode)}
           className={cn(
             "inline-flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
             orientation === "vertical" ? "px-3 py-2.5" : "flex-col gap-1 px-3 py-2 text-xs",
@@ -77,11 +88,15 @@ function NavLinks({
 function UserMenu({
   currentUser,
   compact = false,
-  showSignOut = true
+  showSignOut = true,
+  sourceSystem,
+  entryMode
 }: {
   currentUser: AppUser;
   compact?: boolean;
   showSignOut?: boolean;
+  sourceSystem?: string;
+  entryMode?: EntryMode;
 }) {
   return (
     <details className="group relative">
@@ -113,7 +128,7 @@ function UserMenu({
         <div className="flex flex-col gap-1 pt-2">
           <Link
             className="inline-flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-muted transition-colors hover:bg-panel-muted hover:text-ink"
-            href="/settings"
+            href={sourceHref("/settings", sourceSystem, entryMode)}
           >
             <UserRound size={15} aria-hidden="true" />
             Profile and settings
@@ -177,7 +192,9 @@ function EmbeddedShell({
             >
               <ExternalLink size={17} aria-hidden="true" />
             </Link>
-            {currentUser ? <UserMenu currentUser={currentUser} compact /> : null}
+            {currentUser ? (
+              <UserMenu currentUser={currentUser} compact sourceSystem={sourceSystem} entryMode="embed" />
+            ) : null}
           </div>
         </div>
       </header>

@@ -218,6 +218,51 @@ async function requestCustomerReplyApprovalAction(formData: FormData) {
   redirectToCaseFromForm(formData, parsed.data.caseId);
 }
 
+async function sendCustomerReplyAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const parsed = customerReplyApprovalSchema.safeParse({
+    caseId: String(formData.get("caseId") ?? ""),
+    channel: String(formData.get("channel") ?? ""),
+    draftBody: String(formData.get("draftBody") ?? "").trim()
+  });
+
+  if (!parsed.success) {
+    throw new Error("Invalid customer reply payload");
+  }
+
+  if (!currentUser) {
+    redirect("/login");
+  }
+
+  await createCaseService().sendCustomerReplyForUser(
+    {
+      caseId: parsed.data.caseId,
+      channel: parsed.data.channel as "Email" | "SMS",
+      draftBody: parsed.data.draftBody
+    },
+    currentUser
+  );
+
+  const recommendation = recommendationActionFromForm(formData);
+
+  if (recommendation) {
+    await createCustomerRecommendationService().trackMessageActionForUser(
+      {
+        caseId: parsed.data.caseId,
+        recommendationId: recommendation.recommendationId,
+        productName: recommendation.productName,
+        action: "sent"
+      },
+      currentUser
+    );
+  }
+
+  revalidatePath(`/cases/${parsed.data.caseId}`);
+  redirectToCaseFromForm(formData, parsed.data.caseId);
+}
+
 async function dismissRecommendationAction(formData: FormData) {
   "use server";
 
@@ -414,6 +459,7 @@ export default async function CaseDetailPage({
   const canManageReps = currentUser ? canManageProductRoster(currentUser, caseDetail.sourceSystem) : false;
   const canAddNote = currentUser ? canAddInternalNote(currentUser, caseDetail) : false;
   const canRequestReplyApproval = currentUser ? canRequestCustomerReplyApproval(currentUser, caseDetail) : false;
+  const canSendCustomerReply = currentUser ? canApproveCustomerReply(currentUser, caseDetail) : false;
   const pendingApprovals = caseDetail.approvals.filter((approval) => approval.status === "Pending");
   const actionableApprovals = pendingApprovals.filter(
     (approval) => approval.requestedReviewerId === currentUser.id && canApproveCustomerReply(currentUser, caseDetail)
@@ -632,19 +678,28 @@ export default async function CaseDetailPage({
                           />
                         </label>
                         <div className="flex flex-wrap gap-2">
-                          {customerReplyApprovalRoute ? (
+                          {canSendCustomerReply ? (
+                            <button className={primaryButtonClass} formAction={sendCustomerReplyAction} type="submit">
+                              Send message
+                            </button>
+                          ) : customerReplyApprovalRoute ? (
                             <button className={primaryButtonClass} formAction={requestCustomerReplyApprovalAction} type="submit">
                               Submit for approval
                             </button>
                           ) : (
-                            <span className="inline-flex items-center rounded-md border border-line bg-panel-subtle px-3 py-2 text-sm font-medium text-muted">
-                              No product manager reviewer configured
-                            </span>
+                            <button className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-50`} disabled type="submit">
+                              Submit for approval
+                            </button>
                           )}
                           <button className={secondaryButtonClass} formAction={dismissRecommendationAction} formNoValidate type="submit">
                             Dismiss
                           </button>
                         </div>
+                        {!canSendCustomerReply && !customerReplyApprovalRoute ? (
+                          <span className="w-fit rounded-full border border-warning-bg bg-warning-bg px-2.5 py-1 text-xs font-medium text-warning">
+                            No product manager reviewer configured
+                          </span>
+                        ) : null}
                       </form>
                     ) : (
                       <p className="rounded-md border border-line bg-panel-subtle px-3 py-2 text-sm text-muted">
@@ -692,19 +747,28 @@ export default async function CaseDetailPage({
                       />
                     </label>
                     <div className="flex flex-wrap gap-2">
-                      {customerReplyApprovalRoute ? (
+                      {canSendCustomerReply ? (
+                        <button className={primaryButtonClass} formAction={sendCustomerReplyAction} type="submit">
+                          Send update
+                        </button>
+                      ) : customerReplyApprovalRoute ? (
                         <button className={primaryButtonClass} formAction={requestCustomerReplyApprovalAction} type="submit">
                           Submit for approval
                         </button>
                       ) : (
-                        <span className="inline-flex items-center rounded-md border border-line bg-panel-subtle px-3 py-2 text-sm font-medium text-muted">
-                          No product manager reviewer configured
-                        </span>
+                        <button className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-50`} disabled type="submit">
+                          Submit for approval
+                        </button>
                       )}
                       <button className={secondaryButtonClass} formAction={dismissCustomerReplySuggestionAction} formNoValidate type="submit">
                         Decline
                       </button>
                     </div>
+                    {!canSendCustomerReply && !customerReplyApprovalRoute ? (
+                      <span className="w-fit rounded-full border border-warning-bg bg-warning-bg px-2.5 py-1 text-xs font-medium text-warning">
+                        No product manager reviewer configured
+                      </span>
+                    ) : null}
                   </form>
                 ) : (
                   <p className="text-sm text-muted">This user cannot review customer reply suggestions for this case.</p>

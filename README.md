@@ -146,7 +146,7 @@ For an embedded product dashboard tab, pass `mode=embed`:
 GET /external-entry?token=<signed-jwt>&mode=embed
 ```
 
-Embed mode uses the same FeedApp session, RBAC, and product-scope checks, but renders the app with compact dashboard chrome instead of the standalone sidebar. The embed landing flow carries `entryMode=embed` and `sourceSystem` through dashboard links and case workflow saves so nested case pages keep the embedded chrome after navigation or server-action redirects.
+Embed mode uses the same FeedApp session, RBAC, and product-scope checks, but renders the app with compact dashboard chrome instead of the standalone sidebar. The embed landing flow carries `entryMode=embed` and `sourceSystem` through dashboard links, profile/settings links, and case workflow saves so nested pages keep the embedded chrome after navigation or server-action redirects.
 
 Set `PUBLIC_APP_URL` in production to the browser-facing FeedApp origin. Trusted external-entry redirects use this value when configured so Docker or proxy-internal runtime URLs such as `localhost:3000` are not exposed to users.
 
