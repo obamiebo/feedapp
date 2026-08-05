@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { appUrl } from "@/lib/public-url";
 import { setEntryContext, setSessionCookie, type EntryMode } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 import { createExternalEntryService } from "@/services/external-entry";
 
 function externalEntryErrorUrl(request: Request, reason: string) {
-  return new URL(`/external-entry/error?reason=${encodeURIComponent(reason)}`, request.url);
+  return appUrl(`/external-entry/error?reason=${encodeURIComponent(reason)}`, request.url);
 }
 
 export async function GET(request: Request) {
@@ -24,6 +25,6 @@ export async function GET(request: Request) {
 
   const destinationPath = mode === "embed" ? "/embed" : "/";
   return NextResponse.redirect(
-    new URL(`${destinationPath}?sourceSystem=${encodeURIComponent(result.sourceKeys[0])}`, request.url)
+    appUrl(`${destinationPath}?sourceSystem=${encodeURIComponent(result.sourceKeys[0])}`, request.url)
   );
 }

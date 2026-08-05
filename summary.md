@@ -22,6 +22,35 @@ The current implementation is a database-backed Next.js/React internal operation
 
 ## Latest Session
 
+Date: 2026-08-05
+
+### 2026-08-05 - Public URL for External Entry Redirects
+
+Date: 2026-08-05
+
+Summary:
+
+- Added a shared public URL helper for absolute redirects that prefers `PUBLIC_APP_URL` when configured.
+- Updated trusted external-entry redirects and the embed exit route so EC2/Docker runtime URLs like `localhost:3000` do not leak into user-facing redirects.
+- Documented `PUBLIC_APP_URL` for direct EC2 beta testing on `:18081` and for later HTTPS/domain deployments.
+- Added regression coverage for embed-mode external entry when the runtime request URL is internal but the public app URL is configured.
+
+Files changed:
+
+- `.env.production.example`
+- `README.md`
+- `docs/deploy-ec2-docker.md`
+- `src/app/embed/exit/route.ts`
+- `src/app/external-entry/route.ts`
+- `src/lib/public-url.ts`
+- `tests/external-entry-route.test.ts`
+- `summary.md`
+
+Verification:
+
+- `npx vitest run tests/external-entry-route.test.ts tests/external-entry-service.test.ts`: passed, 10 tests.
+- `npm run typecheck`: passed.
+
 Date: 2026-08-04
 
 ### 2026-08-04 - Product Settings Dialog UX

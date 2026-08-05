@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setEntryContext, setSessionCookie } from "@/lib/session-cookie";
 import { createAuthService } from "@/services/auth";
 import { createExternalEntryService } from "@/services/external-entry";
@@ -20,15 +20,30 @@ vi.mock("@/services/external-entry", () => ({
 describe("/external-entry", () => {
   const authenticate = vi.fn();
   const createSession = vi.fn();
+  const originalPublicAppUrl = process.env.PUBLIC_APP_URL;
+
+  function restorePublicAppUrl() {
+    if (originalPublicAppUrl === undefined) {
+      delete process.env.PUBLIC_APP_URL;
+      return;
+    }
+
+    process.env.PUBLIC_APP_URL = originalPublicAppUrl;
+  }
 
   beforeEach(() => {
     vi.resetAllMocks();
+    restorePublicAppUrl();
     vi.mocked(createExternalEntryService).mockReturnValue({ authenticate });
     vi.mocked(createAuthService).mockReturnValue({ createSession } as never);
     createSession.mockResolvedValue({
       token: "session-token",
       expiresAt: new Date("2026-07-31T22:00:00.000Z")
     });
+  });
+
+  afterEach(() => {
+    restorePublicAppUrl();
   });
 
   it("creates a FeedApp session and redirects to the requested product scope", async () => {
@@ -73,6 +88,20 @@ describe("/external-entry", () => {
     });
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://feedapp.example.com/embed?sourceSystem=fihankra-feedback");
+  });
+
+  it("uses the configured public app URL when the runtime request URL is internal", async () => {
+    process.env.PUBLIC_APP_URL = "http://54.246.247.31:18081";
+    authenticate.mockResolvedValue({
+      ok: true,
+      user: { id: "user-fihankra" },
+      sourceKeys: ["fihankra-feedback"]
+    });
+
+    const response = await GET(new Request("http://localhost:3000/external-entry?token=signed-token&mode=embed"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("http://54.246.247.31:18081/embed?sourceSystem=fihankra-feedback");
   });
 
   it("redirects to a clean error page when the token is rejected", async () => {

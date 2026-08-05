@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appUrl } from "@/lib/public-url";
 import { clearEntryContext } from "@/lib/session-cookie";
 
 export async function GET(request: Request) {
@@ -7,6 +8,6 @@ export async function GET(request: Request) {
   await clearEntryContext();
 
   return NextResponse.redirect(
-    new URL(sourceSystem ? `/?sourceSystem=${encodeURIComponent(sourceSystem)}` : "/", request.url)
+    appUrl(sourceSystem ? `/?sourceSystem=${encodeURIComponent(sourceSystem)}` : "/", request.url)
   );
 }

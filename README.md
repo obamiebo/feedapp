@@ -52,7 +52,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec app np
 ```
 
 The app is exposed on host port `18081`; Postgres is private to the Docker network. The production seed creates the base roles, a Support department, and the configured platform admin. See `docs/deploy-ec2-docker.md` for EC2 setup, deploy, logs, and backup commands.
-For direct HTTP beta testing, set `SESSION_COOKIE_SECURE=false`; switch it to `true` after HTTPS is configured.
+For direct HTTP beta testing, set `PUBLIC_APP_URL` to the browser-facing EC2 origin, for example `http://54.246.247.31:18081`, and set `SESSION_COOKIE_SECURE=false`; switch the URL to the HTTPS domain and `SESSION_COOKIE_SECURE=true` after HTTPS is configured.
 
 Seeded demo users can sign in with the password `Password123!`. Local admin accounts include `admin@example.com` and `obamiebo@itconsortiumgh.com`.
 
@@ -147,6 +147,8 @@ GET /external-entry?token=<signed-jwt>&mode=embed
 ```
 
 Embed mode uses the same FeedApp session, RBAC, and product-scope checks, but renders the app with compact dashboard chrome instead of the standalone sidebar.
+
+Set `PUBLIC_APP_URL` in production to the browser-facing FeedApp origin. Trusted external-entry redirects use this value when configured so Docker or proxy-internal runtime URLs such as `localhost:3000` are not exposed to users.
 
 Admins can enable or disable signed external entry per product source, set the expected issuer, token TTL, allowed destinations, and allowed iframe origins. This configuration generates a separate one-time entry signing secret for the product dashboard backend. The entry secret is distinct from the product intake secret and the product callback signing secret.
 

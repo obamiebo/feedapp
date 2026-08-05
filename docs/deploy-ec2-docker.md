@@ -34,6 +34,18 @@ nano .env.production
 
 Set a long random `POSTGRES_PASSWORD` and `SEED_ADMIN_TEMP_PASSWORD`. Keep messaging providers as `stub` unless live delivery is intentional.
 
+Set `PUBLIC_APP_URL` to the browser-facing app origin. For direct EC2 beta testing on the published Docker port, include the host port:
+
+```bash
+PUBLIC_APP_URL=http://<ec2-host>:18081
+```
+
+When HTTPS is configured through a public domain, change it to the HTTPS origin, for example:
+
+```bash
+PUBLIC_APP_URL=https://feedapp.example.com
+```
+
 For direct HTTP beta testing on `http://<ec2-host>:18081`, keep:
 
 ```bash
@@ -119,3 +131,12 @@ Copy backups off the EC2 instance regularly.
 ## Reverse Proxy
 
 Put Nginx or Caddy in front of `localhost:18081` for HTTPS. The app container should stay on port `3000` internally; the host publishes it as `18081`.
+
+Forward the public host and protocol to avoid runtime URL confusion:
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Port $server_port;
+```
