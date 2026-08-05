@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { middleware } from "../middleware";
+import { middleware } from "@/middleware";
 
 describe("embed middleware", () => {
   it("syncs URL embed context into cookies for layouts", () => {

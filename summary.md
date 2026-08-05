@@ -35,7 +35,7 @@ Summary:
 - Added URL-backed embed context via `entryMode=embed` so case detail pages keep embedded chrome even when cookie context is unavailable.
 - Preserved embed context and product source through dashboard case links, operations queue links, pagination, filters, and case-detail workflow forms.
 - Updated case-detail workflow redirects to use `PUBLIC_APP_URL` when configured, covering assignee/status/note/reply server actions that could otherwise expose runtime-local URLs after a save.
-- Added middleware to sync `entryMode=embed` URL state into entry-context cookies so layouts such as settings render embedded chrome when opened from the avatar menu.
+- Added `src/middleware.ts` to sync `entryMode=embed` URL state into entry-context cookies so layouts such as settings render embedded chrome when opened from the avatar menu.
 - Updated customer reply UI so Product Managers can send updates directly, while users who require routing still see a disabled approval button plus a `No product manager reviewer configured` tag when no reviewer exists.
 - Documented `PUBLIC_APP_URL` for direct EC2 beta testing on `:18081` and for later HTTPS/domain deployments.
 - Added regression coverage for embed-mode external entry when the runtime request URL is internal but the public app URL is configured.
@@ -43,7 +43,6 @@ Summary:
 Files changed:
 
 - `.env.production.example`
-- `middleware.ts`
 - `README.md`
 - `docs/deploy-ec2-docker.md`
 - `src/app/embed/exit/route.ts`
@@ -53,6 +52,7 @@ Files changed:
 - `src/app/page.tsx`
 - `src/components/app-shell.tsx`
 - `src/lib/public-url.ts`
+- `src/middleware.ts`
 - `tests/embed-middleware.test.ts`
 - `tests/external-entry-route.test.ts`
 - `summary.md`
@@ -60,8 +60,9 @@ Files changed:
 Verification:
 
 - `npx vitest run tests/embed-middleware.test.ts tests/access-control.test.ts tests/case-service.test.ts tests/external-entry-route.test.ts tests/external-entry-service.test.ts`: passed, 55 tests.
+- `npx vitest run tests/embed-middleware.test.ts tests/external-entry-route.test.ts tests/external-entry-service.test.ts`: passed, 11 tests after moving middleware under `src/`.
 - `npm run typecheck`: passed.
-- `npm run build:verify`: passed.
+- `npm run build:verify`: passed, and `.next-verify/server/middleware-manifest.json` now registers `src/middleware`.
 
 Date: 2026-08-04
 
