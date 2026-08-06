@@ -1,18 +1,21 @@
-import { Boxes, ShieldCheck, UsersRound, XCircle } from "lucide-react";
+import { BookOpen, Boxes, RefreshCw, ShieldCheck, Trash2, UsersRound, XCircle } from "lucide-react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { ManageProductSourceDialog } from "@/components/manage-product-source-dialog";
 import { ProductGroupDialog } from "@/components/product-group-dialog";
+import { ProductKnowledgeDialog } from "@/components/product-knowledge-dialog";
 import { ProductSourceDialog } from "@/components/product-source-dialog";
 import { ProductRosterUserDialog } from "@/components/product-roster-user-dialog";
 import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DataTable } from "@/components/ui/data-table";
 import type { AdminProductGroup, AdminProductSource, ProductRosterMember } from "@/services/admin";
+import type { ProductKnowledgeDocumentRecord, ProductKnowledgeDocumentType } from "@/repositories/product-knowledge";
 import { canManageAdmin, canManageAnyProductRoster } from "@/lib/access-control";
 import { resolveCurrentUser } from "@/lib/current-user";
 import { createAdminService } from "@/services/admin";
+import { createProductKnowledgeService } from "@/services/product-knowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -290,6 +293,120 @@ async function removeProductRosterUserAction(formData: FormData) {
   redirect(`/settings/products?sourceId=${encodeURIComponent(sourceId)}`);
 }
 
+const productKnowledgeDocumentTypes = new Set<ProductKnowledgeDocumentType>([
+  "faq",
+  "manual",
+  "troubleshooting",
+  "release_note",
+  "policy"
+]);
+
+function parseKnowledgeDocumentType(value: FormDataEntryValue | null): ProductKnowledgeDocumentType {
+  const documentType = String(value ?? "faq");
+  return productKnowledgeDocumentTypes.has(documentType as ProductKnowledgeDocumentType)
+    ? (documentType as ProductKnowledgeDocumentType)
+    : "faq";
+}
+
+async function uploadProductKnowledgeAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const productSourceKey = String(formData.get("productSourceKey") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const text = String(formData.get("text") ?? "").trim();
+  const file = formData.get("file");
+  const description = String(formData.get("description") ?? "").trim();
+  const documentType = parseKnowledgeDocumentType(formData.get("documentType"));
+  const hasFile = file instanceof File && file.size > 0;
+
+  if (!currentUser) {
+    throw new Error("Current user is required");
+  }
+
+  if (!productSourceKey || title.length < 2 || (!hasFile && text.length < 20)) {
+    redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}&knowledgeError=invalid-input`);
+  }
+
+  try {
+    if (hasFile) {
+      await createProductKnowledgeService().uploadFileForUser(
+        {
+          productSourceKey,
+          title,
+          file,
+          filename: file.name,
+          documentType,
+          description
+        },
+        currentUser
+      );
+    } else {
+      await createProductKnowledgeService().uploadTextForUser(
+        {
+          productSourceKey,
+          title,
+          text,
+          documentType,
+          description
+        },
+        currentUser
+      );
+    }
+  } catch {
+    redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}&knowledgeError=upload-failed`);
+  }
+
+  revalidatePath("/settings/products");
+  redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}`);
+}
+
+async function refreshProductKnowledgeStatusAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const productSourceKey = String(formData.get("productSourceKey") ?? "").trim();
+  const documentServiceId = String(formData.get("documentServiceId") ?? "").trim();
+  const processingTaskId = String(formData.get("processingTaskId") ?? "").trim();
+
+  if (!currentUser || !productSourceKey || !documentServiceId || !processingTaskId) {
+    throw new Error("Product knowledge document is required");
+  }
+
+  try {
+    await createProductKnowledgeService().refreshProcessingStatusForUser(
+      { productSourceKey, documentServiceId, processingTaskId },
+      currentUser
+    );
+  } catch {
+    redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}&knowledgeError=status-failed`);
+  }
+
+  revalidatePath("/settings/products");
+  redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}`);
+}
+
+async function deleteProductKnowledgeAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const productSourceKey = String(formData.get("productSourceKey") ?? "").trim();
+  const documentServiceId = String(formData.get("documentServiceId") ?? "").trim();
+
+  if (!currentUser || !productSourceKey || !documentServiceId) {
+    throw new Error("Product knowledge document is required");
+  }
+
+  try {
+    await createProductKnowledgeService().deleteForUser({ productSourceKey, documentServiceId }, currentUser);
+  } catch {
+    redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}&knowledgeError=delete-failed`);
+  }
+
+  revalidatePath("/settings/products");
+  redirect(`/settings/products?sourceId=${encodeURIComponent(productSourceKey)}`);
+}
+
 export default async function SettingsProductsPage({
   searchParams
 }: {
@@ -334,6 +451,9 @@ export default async function SettingsProductsPage({
   const entryError = Array.isArray(resolvedSearchParams.entryError)
     ? resolvedSearchParams.entryError[0]
     : resolvedSearchParams.entryError;
+  const knowledgeError = Array.isArray(resolvedSearchParams.knowledgeError)
+    ? resolvedSearchParams.knowledgeError[0]
+    : resolvedSearchParams.knowledgeError;
   const newEntryKey = Array.isArray(resolvedSearchParams.newEntryKey)
     ? resolvedSearchParams.newEntryKey[0]
     : resolvedSearchParams.newEntryKey;
@@ -348,6 +468,9 @@ export default async function SettingsProductsPage({
       : Promise.resolve({ productGroups: [], productSources: [] }),
     adminService.getProductRosterDirectory(currentUser, selectedSourceId)
   ]);
+  const productKnowledgeDocuments = rosterDirectory.selectedSource
+    ? await createProductKnowledgeService().listForUser(rosterDirectory.selectedSource.key, currentUser)
+    : [];
   const teamDirectory = canManagePlatform ? await adminService.getTeamDirectory() : null;
   const productManagerOptions =
     teamDirectory?.users.filter(
@@ -377,6 +500,16 @@ export default async function SettingsProductsPage({
       : entryError === "save-failed"
         ? "Embedded access settings could not be saved."
         : null;
+  const knowledgeErrorMessage =
+    knowledgeError === "invalid-input"
+      ? "Enter a title and at least 20 characters of knowledge text."
+      : knowledgeError === "upload-failed"
+        ? "Product knowledge could not be uploaded. Check document-service configuration and try again."
+        : knowledgeError === "status-failed"
+          ? "Processing status could not be refreshed."
+          : knowledgeError === "delete-failed"
+            ? "Product knowledge could not be deleted."
+            : null;
 
   const rosterSection = (
     <section className="rounded-lg border border-line bg-panel shadow-sm">
@@ -487,9 +620,126 @@ export default async function SettingsProductsPage({
     </section>
   );
 
+  const productKnowledgeSection = (
+    <section className="rounded-lg border border-line bg-panel shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen size={18} className="text-muted" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-ink">Product knowledge</h2>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          {rosterDirectory.selectedSource ? (
+            <form className="min-w-[260px]" method="get">
+              <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="knowledge-source">
+                Product
+                <AutoSubmitSelect
+                  id="knowledge-source"
+                  name="sourceId"
+                  defaultValue={rosterDirectory.selectedSource.id}
+                  className={inputClass}
+                  options={rosterDirectory.productSources
+                    .filter((source) => source.canManageRoster)
+                    .map((source) => ({ value: source.id, label: source.name }))}
+                />
+              </label>
+            </form>
+          ) : null}
+          <ProductKnowledgeDialog
+            action={uploadProductKnowledgeAction}
+            productSourceKey={rosterDirectory.selectedSource?.key}
+            disabled={!rosterDirectory.selectedSource}
+          />
+        </div>
+      </div>
+      {rosterDirectory.selectedSource ? (
+        <div className="flex flex-col gap-4 p-5">
+          {knowledgeErrorMessage ? (
+            <div className="rounded-md border border-critical/30 bg-critical-bg px-3 py-2 text-sm text-critical">
+              {knowledgeErrorMessage}
+            </div>
+          ) : null}
+
+          <div className="rounded-md border border-line">
+            <DataTable<ProductKnowledgeDocumentRecord>
+              columns={[
+                {
+                  key: "title",
+                  header: "Document",
+                  render: (document) => (
+                    <div>
+                      <div className="font-medium text-ink">{document.title}</div>
+                      <div className="text-xs text-muted">{document.documentServiceId}</div>
+                    </div>
+                  )
+                },
+                { key: "type", header: "Type", render: (document) => readableKnowledgeType(document.documentType) },
+                {
+                  key: "status",
+                  header: "Status",
+                  render: (document) => (
+                    <div>
+                      <div>{readableKnowledgeStatus(document.processingStatus)}</div>
+                      {document.processingError ? <div className="text-xs text-critical">{document.processingError}</div> : null}
+                    </div>
+                  )
+                },
+                {
+                  key: "updated",
+                  header: "Updated",
+                  render: (document) => document.updatedAt.toLocaleDateString("en-GB")
+                },
+                {
+                  key: "actions",
+                  header: "Actions",
+                  render: (document) => (
+                    <div className="flex flex-wrap gap-3">
+                      <form action={refreshProductKnowledgeStatusAction}>
+                        <input name="productSourceKey" type="hidden" value={rosterDirectory.selectedSource?.key} />
+                        <input name="documentServiceId" type="hidden" value={document.documentServiceId} />
+                        <input name="processingTaskId" type="hidden" value={document.processingTaskId ?? ""} />
+                        <ConfirmSubmitButton
+                          className="inline-flex items-center gap-1 text-sm font-medium text-ink"
+                          confirmMessage={`Refresh processing status for ${document.title}?`}
+                          disabled={!document.processingTaskId}
+                          pendingChildren="Refreshing..."
+                        >
+                          <RefreshCw size={14} /> Refresh
+                        </ConfirmSubmitButton>
+                      </form>
+                      <form action={deleteProductKnowledgeAction}>
+                        <input name="productSourceKey" type="hidden" value={rosterDirectory.selectedSource?.key} />
+                        <input name="documentServiceId" type="hidden" value={document.documentServiceId} />
+                        <ConfirmSubmitButton
+                          className="inline-flex items-center gap-1 text-sm font-medium text-critical"
+                          confirmMessage={`Delete ${document.title} from product knowledge?`}
+                          pendingChildren="Deleting..."
+                        >
+                          <Trash2 size={14} /> Delete
+                        </ConfirmSubmitButton>
+                      </form>
+                    </div>
+                  )
+                }
+              ]}
+              rows={productKnowledgeDocuments}
+              getRowKey={(document) => document.id}
+              emptyIcon={BookOpen}
+              emptyMessage="No product knowledge has been uploaded for this product yet."
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="p-6">
+          <EmptyState icon={BookOpen} message="No directly managed products are available for knowledge management." />
+        </div>
+      )}
+    </section>
+  );
+
   return canManagePlatform ? (
     <div className="flex flex-col gap-6">
       {rosterSection}
+      {productKnowledgeSection}
 
       <section className="rounded-lg border border-line bg-panel shadow-sm">
         <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -604,6 +854,23 @@ export default async function SettingsProductsPage({
       </section>
     </div>
   ) : (
-    <div className="max-w-4xl">{rosterSection}</div>
+    <div className="flex max-w-4xl flex-col gap-6">
+      {rosterSection}
+      {productKnowledgeSection}
+    </div>
   );
+}
+
+function readableKnowledgeType(documentType: ProductKnowledgeDocumentType) {
+  return documentType
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function readableKnowledgeStatus(status: ProductKnowledgeDocumentRecord["processingStatus"]) {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

@@ -6,8 +6,10 @@ import {
   canEnterApplication,
   canEscalateCase,
   canApproveCustomerReply,
+  canManageProductKnowledge,
   canManageProductRoster,
   canManageAdmin,
+  canSearchProductKnowledge,
   canRequestCustomerReplyApproval,
   canTransitionCase,
   canViewCase
@@ -99,6 +101,20 @@ describe("access control", () => {
       )
     ).toBe(false);
     expect(canManageProductRoster(baseUser, "manual")).toBe(false);
+  });
+
+  it("limits product knowledge management while allowing scoped search", () => {
+    expect(canManageProductKnowledge({ ...baseUser, roles: ["Admin"], directProductSourceKeys: [] }, "manual")).toBe(true);
+    expect(canManageProductKnowledge({ ...baseUser, roles: ["Product Manager"] }, "manual")).toBe(true);
+    expect(
+      canManageProductKnowledge(
+        { ...baseUser, roles: ["Product Manager"], directProductSourceKeys: [], productSourceKeys: ["manual"] },
+        "manual"
+      )
+    ).toBe(false);
+    expect(canManageProductKnowledge(baseUser, "manual")).toBe(false);
+    expect(canSearchProductKnowledge(baseUser, "manual")).toBe(true);
+    expect(canSearchProductKnowledge(baseUser, "other-product")).toBe(false);
   });
 
   it("keeps admin configuration separate from case operations", () => {

@@ -517,6 +517,44 @@ Acceptance criteria:
 - `[ ]` MCP tool actions are auditable.
 - `[ ]` AI-generated suggestions never bypass approval controls.
 
+## Phase 14: Agentic Feedback Bot And Product Knowledge
+
+Goal: add a FeedApp-owned first-response bot that uses the ITC agent framework for orchestration and the existing document service for product-scoped knowledge retrieval.
+
+Tasks:
+
+- `[x]` Create the dedicated agentic feature implementation plan.
+- `[x]` Add FeedApp environment placeholders for agent, document-service, and chat-management integration.
+- `[x]` Reuse the existing EC2-hosted document service instead of copying document indexing into FeedApp.
+- `[x]` Add `project_id` search scoping support to document-service search.
+- `[x]` Add document-service service-key support for trusted FeedApp backend calls.
+- `[x]` Add FeedApp document-service client wrapper.
+- `[x]` Add FeedApp product knowledge metadata schema, migration, and repository.
+- `[x]` Add FeedApp product knowledge access-control helpers.
+- `[x]` Add FeedApp product knowledge service layer for text upload, search, status refresh, and delete.
+- `[x]` Add product knowledge settings UI for text upload, list, status refresh, and delete.
+- `[x]` Add product knowledge file-upload service flow.
+- `[x]` Add product knowledge file-upload UI.
+- `[x]` Refresh product knowledge processing status by stored task ID.
+- `[ ]` Add product knowledge reindex action.
+- `[x]` Add FeedApp-owned MCP tool endpoint that calls application services, not the database directly.
+- `[x]` Add MCP tools for case context, product knowledge search, customer reply draft creation, and internal notes.
+- `[x]` Add FeedApp `verify_url` endpoint so chat-management can validate FeedApp session bearer tokens.
+- `[ ]` Register FeedApp as an application in chat-management and link only the FeedApp MCP server.
+- `[ ]` Add bot reply generation service that calls chat-management and stores draft-only approval requests.
+- `[ ]` Add case-detail UI action for generating a bot reply draft.
+- `[ ]` Add audit events for bot request, knowledge search, draft creation, and later approval/rejection.
+- `[ ]` Add observability for bot run ID, case ID, product source, tool calls, draft ID, and failure reason.
+- `[ ]` Roll out behind `FEEDBACK_AGENT_ENABLED`.
+
+Acceptance criteria:
+
+- `[ ]` Product knowledge search is always scoped to the product source derived from FeedApp.
+- `[ ]` Product Managers can manage only directly assigned product knowledge, while Admins can manage all product knowledge.
+- `[ ]` Product Users can search only knowledge for granted product sources.
+- `[ ]` The bot creates customer reply drafts only; it does not send messages, transition cases, or assign cases in v1.
+- `[ ]` Bot and MCP actions reuse FeedApp authorization and are auditable.
+
 ## Testing Strategy
 
 Core checks:

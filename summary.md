@@ -10,10 +10,10 @@ The current implementation is a database-backed Next.js/React internal operation
 
 ## Current Status
 
-- Overall stage: database-backed internal workflow foundation with product-scoped authorization, customer messaging delivery tracking, and admin operations foundations in progress.
-- Current active phases: Phase 1, Phase 2, Phase 3, Phase 4, Phase 6, Phase 7, Phase 9, and Phase 10.
-- Most important next work: SLA/escalation automation, product embedded monitoring, or production deployment hardening.
-- Current runtime data source: Postgres for the dashboard, case pages, settings/admin pages, cases API, product intake, message delivery status, product callback attempts, and operations view; analytics recommendations still use stub/provider foundations.
+- Overall stage: database-backed internal workflow foundation with product-scoped authorization, customer messaging delivery tracking, admin operations foundations, and agentic product-knowledge foundations in progress.
+- Current active phases: Phase 1, Phase 2, Phase 3, Phase 4, Phase 6, Phase 7, Phase 9, Phase 10, and Phase 14.
+- Most important next work: product knowledge settings UI, FeedApp MCP tool layer, bot draft workflow, SLA/escalation automation, or production deployment hardening.
+- Current runtime data source: Postgres for the dashboard, case pages, settings/admin pages, cases API, product intake, message delivery status, product callback attempts, operations view, and product knowledge metadata; analytics recommendations still use stub/provider foundations.
 - Current database setup state: Docker Compose, initial migration, seed script, and seed verification are working against local Postgres.
 - Current authentication state: email/password sessions are implemented with provisioning and temporary-password enforcement; SSO remains deferred.
 - Current integration state: product intake validation, credentials, persistence, idempotency, signed outbound source callbacks, callback delivery tracking, and failed-callback retry are implemented; embed tokens and queues are not implemented yet.
@@ -21,6 +21,80 @@ The current implementation is a database-backed Next.js/React internal operation
 - Current UI/design state: the staff-facing app (dashboard, settings, case detail, manual intake, login, change-password, operations) runs on a single Tailwind CSS v4 design system with a shared component library; no page still depends on the old hand-rolled `globals.css` component styles.
 
 ## Latest Session
+
+Date: 2026-08-06
+
+### 2026-08-06 - Agentic Feedback Bot Foundations
+
+Date: 2026-08-06
+
+Summary:
+
+- Added `agentic_featurePlan.md` with the phased plan for the FeedApp first-response bot, product knowledge indexing, document-service integration, FeedApp MCP tools, and draft-only bot replies.
+- Added FeedApp environment placeholders for `FEEDBACK_AGENT_ENABLED`, document-service URL/API key, and chat-management URL/app key.
+- Extended document-service search to accept `project_id`, using FeedApp `IntegrationSource.key` as the product knowledge scope.
+- Added document-service `X-Service-Key` support for trusted FeedApp backend calls while preserving JWT support for existing callers.
+- Added a typed FeedApp document-service client wrapper for product knowledge search, text/file upload, processing status, and delete.
+- Added FeedApp product knowledge metadata enums/model, migration, repository, and tests.
+- Added product knowledge access-control helpers and a service layer for text upload, scoped search, status refresh, and delete.
+- Added `Settings > Products` product knowledge management for selected products, including text/file upload, document list, status refresh, and delete actions.
+- Fixed processing status refresh to call document-service with the stored processing task ID instead of the document-service document ID.
+- Added FeedApp-owned `/api/mcp` JSON-RPC endpoint with service-token authorization for `initialize`, `tools/list`, and `tools/call`.
+- Added v1 MCP tools for case context lookup, case-scoped product knowledge search, draft-only customer reply approval creation, and internal note creation.
+- Added `GET /api/agent-auth/verify` so chat-management can validate FeedApp session bearer tokens through `verify_url` application auth.
+- Updated the ERID agent admin frontend MCP server forms so `api_key` auth exposes an API key field and sends `auth_config.api_key` to chat-management.
+- Fixed the ERID application API-key copy button so it falls back when `navigator.clipboard` is unavailable or blocked.
+- Fixed ERID auth-service user creation so `email_sent` reflects the actual SMTP send result instead of only echoing the request flag.
+- Updated `plan.md` with Phase 14 for the agentic feedback bot and marked the completed foundation tasks.
+
+Files changed:
+
+- `.env.example`
+- `agentic_featurePlan.md`
+- `plan.md`
+- `prisma/schema.prisma`
+- `prisma/migrations/20260806113000_product_knowledge_documents/migration.sql`
+- `src/lib/access-control.ts`
+- `src/lib/document-service.ts`
+- `src/repositories/product-knowledge.ts`
+- `src/services/product-knowledge.ts`
+- `src/services/mcp-tools.ts`
+- `src/components/product-knowledge-dialog.tsx`
+- `src/app/settings/products/page.tsx`
+- `src/app/api/mcp/route.ts`
+- `src/app/api/agent-auth/verify/route.ts`
+- `tests/access-control.test.ts`
+- `tests/document-service-client.test.ts`
+- `tests/product-knowledge-repository.test.ts`
+- `tests/product-knowledge-service.test.ts`
+- `../itc-agent-framework/docker-compose.yml`
+- `../itc-agent-framework/document-service/.env.example`
+- `../itc-agent-framework/document-service/app/core/config.py`
+- `../itc-agent-framework/document-service/app/core/security.py`
+- `../itc-agent-framework/document-service/app/routers/documents.py`
+- `../itc-agent-framework/document-service/app/schemas/document.py`
+- `../itc-agent-framework/document-service/app/services/document_search_filters.py`
+- `../itc-agent-framework/document-service/app/services/document_service.py`
+- `../itc-agent-framework/document-service/app/services/elasticsearch_service.py`
+- `../itc-agent-framework/document-service/tests/test_document_search_filters.py`
+- `../itc-agent-framework/document-service/tests/test_service_key_auth.py`
+- `../itc-agent-framework/itc-agent-frontend/src/app/admin/mcp-servers/page.tsx`
+- `../itc-agent-framework/itc-agent-frontend/src/app/admin/applications/components/app-mcp-servers.tsx`
+- `../itc-agent-framework/itc-agent-frontend/src/app/admin/applications/components/api-key-banner.tsx`
+- `../itc-agent-framework/itc-agent-frontend/src/app/admin/users/create-user-modal.tsx`
+- `../itc-agent-framework/erid-auth-service/app/services/admin_service.py`
+- `../itc-agent-framework/erid-auth-service/app/routers/admin.py`
+
+Verification:
+
+- `npx vitest run tests/access-control.test.ts tests/document-service-client.test.ts tests/product-knowledge-repository.test.ts tests/product-knowledge-service.test.ts`: passed, 24 tests.
+- `npx vitest run tests/api-mcp-route.test.ts tests/mcp-tools.test.ts`: passed, 7 tests.
+- `npx vitest run tests/api-agent-auth-verify-route.test.ts tests/api-mcp-route.test.ts tests/mcp-tools.test.ts`: passed, 11 tests.
+- `npx vitest run tests/document-service-client.test.ts tests/product-knowledge-repository.test.ts`: passed, 7 tests.
+- `npx prisma validate`: passed.
+- `npm run typecheck`: passed.
+- `python3 -B -m py_compile ...` for changed document-service Python files: passed.
+- Document-service pytest was not run locally because the active Python environment is missing project dependencies such as `pytest` and `jwt`.
 
 Date: 2026-08-05
 

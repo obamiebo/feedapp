@@ -42,6 +42,22 @@ enum MessageDeliveryStatus {
   FAILED
 }
 
+enum ProductKnowledgeDocumentType {
+  FAQ
+  MANUAL
+  TROUBLESHOOTING
+  RELEASE_NOTE
+  POLICY
+}
+
+enum ProductKnowledgeProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  DELETED
+}
+
 model User {
   id               String             @id @default(cuid())
   email            String             @unique
@@ -62,6 +78,7 @@ model User {
   sessions         UserSession[]
   productAccess    UserProductAccess[]
   productGroupAccess UserProductGroupAccess[]
+  uploadedProductKnowledgeDocuments ProductKnowledgeDocument[] @relation("ProductKnowledgeUploadedBy")
 }
 
 model UserSession {
@@ -267,8 +284,29 @@ model IntegrationSource {
   events     IntegrationEvent[]
   callbackAttempts IntegrationCallbackAttempt[]
   userAccess UserProductAccess[]
+  knowledgeDocuments ProductKnowledgeDocument[]
 
   @@index([groupId])
+}
+
+model ProductKnowledgeDocument {
+  id                String                           @id @default(cuid())
+  sourceId          String
+  documentServiceId String                           @unique
+  title             String
+  documentType      ProductKnowledgeDocumentType
+  processingStatus  ProductKnowledgeProcessingStatus @default(PENDING)
+  processingTaskId  String?
+  processingError   String?
+  uploadedById      String?
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
+  source            IntegrationSource                @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  uploadedBy        User?                            @relation("ProductKnowledgeUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([sourceId, documentType])
+  @@index([sourceId, processingStatus])
+  @@index([uploadedById])
 }
 
 model UserProductAccess {
