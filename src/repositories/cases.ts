@@ -19,6 +19,7 @@ export type CaseListItem = FeedbackCase & {
   departmentName: string;
   productName: string | null;
   assigneeName: string | null;
+  tags?: Array<{ id: string; name: string; color: string }>;
 };
 
 export type CaseSlaState = "on-track" | "at-risk" | "breached";
@@ -31,6 +32,7 @@ export type CaseListFilters = {
   sourceSystem?: string;
   sourceSystems?: string[];
   productGroupId?: string;
+  tagId?: string;
   slaState?: CaseSlaState;
   search?: string;
 };
@@ -71,6 +73,7 @@ export type ProductReport = {
   customerName: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
+  tags?: Array<{ id: string; name: string; color: string }>;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -165,6 +168,7 @@ type PrismaCaseWithRelations = Case & {
   customer: { name: string | null };
   department: { name: string };
   assignee: { name: string } | null;
+  tagAssignments: Array<{ tag: { id: string; name: string; color: string } }>;
 };
 
 type PrismaCaseDetail = Case & {
@@ -180,6 +184,7 @@ type PrismaCaseDetail = Case & {
   messages: Message[];
   approvals: Array<Approval & { approver: { name: string } | null; requestedReviewer: { name: string } | null }>;
   auditLogs: Array<AuditLog & { actor: { name: string } | null }>;
+  tagAssignments: Array<{ tag: { id: string; name: string; color: string } }>;
 };
 
 function toFeedbackCase(record: Case): FeedbackCase {
@@ -208,7 +213,8 @@ function toCaseListItem(record: PrismaCaseWithRelations): CaseListItem {
     customerName: record.customer.name,
     departmentName: record.department.name,
     productName: record.sourceSystem,
-    assigneeName: record.assignee?.name ?? null
+    assigneeName: record.assignee?.name ?? null,
+    tags: record.tagAssignments.map((assignment) => assignment.tag)
   };
 }
 
@@ -272,6 +278,7 @@ function toProductReport(record: {
     email: string | null;
     phone: string | null;
   };
+  tagAssignments?: Array<{ tag: { id: string; name: string; color: string } }>;
 }): ProductReport {
   return {
     caseID: record.externalId ?? record.id,
@@ -283,6 +290,7 @@ function toProductReport(record: {
     customerName: record.customer.name,
     customerEmail: record.customer.email,
     customerPhone: record.customer.phone,
+    tags: (record.tagAssignments ?? []).map((assignment) => assignment.tag),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt
   };
@@ -351,6 +359,14 @@ function buildCaseWhere(filters: CaseListFilters = {}, now = new Date(), user?: 
     where.assigneeId = filters.assigneeId === "unassigned" ? null : filters.assigneeId;
   }
 
+  if (filters.tagId) {
+    where.tagAssignments = {
+      some: {
+        tagId: filters.tagId
+      }
+    };
+  }
+
   if (filters.sourceSystem) {
     where.sourceSystem = {
       contains: filters.sourceSystem,
@@ -414,7 +430,8 @@ export function createPrismaCaseRepository(client: PrismaClient = prisma): CaseR
         include: {
           assignee: { select: { name: true } },
           customer: { select: { name: true } },
-          department: { select: { name: true } }
+          department: { select: { name: true } },
+          tagAssignments: { include: { tag: { select: { id: true, name: true, color: true } } } }
         },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
       });
@@ -428,7 +445,8 @@ export function createPrismaCaseRepository(client: PrismaClient = prisma): CaseR
       const include = {
         assignee: { select: { name: true } },
         customer: { select: { name: true } },
-        department: { select: { name: true } }
+        department: { select: { name: true } },
+        tagAssignments: { include: { tag: { select: { id: true, name: true, color: true } } } }
       };
       const orderBy: Prisma.CaseOrderByWithRelationInput[] = [{ updatedAt: "desc" }, { createdAt: "desc" }];
       const [total, records] = await Promise.all([
@@ -494,7 +512,8 @@ export function createPrismaCaseRepository(client: PrismaClient = prisma): CaseR
               email: true,
               phone: true
             }
-          }
+          },
+          tagAssignments: { include: { tag: { select: { id: true, name: true, color: true } } } }
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
@@ -620,6 +639,7 @@ export function createPrismaCaseRepository(client: PrismaClient = prisma): CaseR
             }
           },
           department: { select: { name: true } },
+          tagAssignments: { include: { tag: { select: { id: true, name: true, color: true } } } },
           messages: { orderBy: { createdAt: "desc" } },
           approvals: {
             include: {

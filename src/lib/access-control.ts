@@ -53,6 +53,12 @@ export function canManageProductKnowledge(user: AppUser, sourceKey: string): boo
   return hasRole(user, "Product Manager") && user.directProductSourceKeys.includes(sourceKey);
 }
 
+export function canManageProductTags(user: AppUser, sourceKey: string): boolean {
+  if (!canEnterApplication(user)) return false;
+  if (hasRole(user, "Admin")) return true;
+  return hasRole(user, "Product Manager") && user.productSourceKeys.includes(sourceKey);
+}
+
 export function canSearchProductKnowledge(user: AppUser, sourceKey: string): boolean {
   if (!canEnterApplication(user)) return false;
   return canManageProductKnowledge(user, sourceKey) || user.productSourceKeys.includes(sourceKey);
@@ -61,6 +67,11 @@ export function canSearchProductKnowledge(user: AppUser, sourceKey: string): boo
 export function canManageAnyProductRoster(user: AppUser): boolean {
   if (!canEnterApplication(user)) return false;
   return hasRole(user, "Admin") || (hasRole(user, "Product Manager") && user.directProductSourceKeys.length > 0);
+}
+
+export function canManageAnyProductTags(user: AppUser): boolean {
+  if (!canEnterApplication(user)) return false;
+  return hasRole(user, "Admin") || (hasRole(user, "Product Manager") && user.productSourceKeys.length > 0);
 }
 
 export function canAddInternalNote(user: AppUser, feedbackCase: FeedbackCase): boolean {

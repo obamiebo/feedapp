@@ -118,6 +118,43 @@ curl 'http://localhost:3000/api/ingestion/reports?status=IN_PROGRESS&customerID=
 
 Supported filters are `caseID`, `customerID`, `status`, `from`, `to`, `limit`, and `cursor`. Status values are `NEW`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`, and `REOPENED`.
 
+Product teams can append customer replies to the same case conversation by posting to the case message endpoint. `caseId` may be either the FeedApp case ID or the product's submitted `caseID`. Replies to `RESOLVED` or `CLOSED` cases reopen the case.
+
+```bash
+curl -X POST 'http://localhost:3000/api/ingestion/reports/COM-DEMO-1001/messages' \
+  -H 'content-type: application/json' \
+  -H 'x-feedback-source: commerce-platform' \
+  -H 'x-feedback-secret: commerce-secret-123' \
+  -d '{
+    "channel": "Email",
+    "body": "This is still happening on my account.",
+    "externalMessageId": "email-thread-message-123",
+    "customerEmail": "demo.customer@example.com"
+  }'
+```
+
+Product-scoped case tags are managed in `Settings > Products > Case tags`. Tags belong to one product source and can be applied only to cases from that product. Product-authenticated systems can also manage their own tag catalog and assign tags:
+
+```bash
+curl 'http://localhost:3000/api/ingestion/tags' \
+  -H 'x-feedback-source: commerce-platform' \
+  -H 'x-feedback-secret: commerce-secret-123'
+
+curl -X POST 'http://localhost:3000/api/ingestion/tags' \
+  -H 'content-type: application/json' \
+  -H 'x-feedback-source: commerce-platform' \
+  -H 'x-feedback-secret: commerce-secret-123' \
+  -d '{"name":"Billing","color":"#244f89","description":"Payment and checkout issues"}'
+
+curl -X POST 'http://localhost:3000/api/ingestion/reports/COM-DEMO-1001/tags' \
+  -H 'content-type: application/json' \
+  -H 'x-feedback-source: commerce-platform' \
+  -H 'x-feedback-secret: commerce-secret-123' \
+  -d '{"tagIds":["tag-id-from-list"]}'
+```
+
+Product report list responses include a `tags` array for each case.
+
 Trusted product dashboards can also deep-link pre-provisioned FeedApp users without a FeedApp login screen:
 
 ```text
@@ -153,6 +190,28 @@ Set `PUBLIC_APP_URL` in production to the browser-facing FeedApp origin. Trusted
 Admins can enable or disable signed external entry per product source, set the expected issuer, token TTL, allowed destinations, and allowed iframe origins. This configuration generates a separate one-time entry signing secret for the product dashboard backend. The entry secret is distinct from the product intake secret and the product callback signing secret.
 
 Configure `EMBED_ALLOWED_ORIGINS` with a comma-separated deployment allow-list of product dashboard origins that may frame FeedApp. Per-product allowed origins are stored with the product settings for operational clarity, while the deployment CSP allow-list is enforced through `EMBED_ALLOWED_ORIGINS`.
+
+## Agentic Bot Setup
+
+The FeedApp bot workflow is disabled unless `FEEDBACK_AGENT_ENABLED="true"`.
+
+Register FeedApp in chat-management as an application with:
+
+- `auth_config.method`: `verify_url`
+- `auth_config.verify_url`: the browser/network reachable FeedApp `FEEDBACK_AGENT_VERIFY_URL`, for example `http://localhost:3000/api/agent-auth/verify`
+- the returned application API key stored in FeedApp as `CHAT_MANAGEMENT_APP_KEY`
+
+Register the FeedApp MCP server in chat-management and link it only to the FeedApp application:
+
+- URL: `${PUBLIC_APP_URL_OR_LOCAL_ORIGIN}/api/mcp`
+- Auth type: `api_key`
+- API key: the same value configured in FeedApp as `FEEDBACK_MCP_API_KEY`
+
+FeedApp calls chat-management at `${CHAT_MANAGEMENT_API_URL}/chat-v2/legacy` with `X-App-Key: CHAT_MANAGEMENT_APP_KEY` and the current FeedApp session token as `Authorization: Bearer <session>`. Generated bot replies are draft-only: FeedApp either reuses a tool-created approval ID returned by chat-management or stores the returned draft through the existing customer reply approval flow.
+
+When enabled, the staff dashboard shows a floating FeedApp assistant. The assistant posts to FeedApp-owned `/api/agent/chat`, which adds FeedApp operational instructions and forwards the request to chat-management. The registered FeedApp MCP server currently exposes read/recommend tools for feedback counts, filtered case lists, case context, product knowledge search, assignable-user lookup, and next-action recommendations, plus draft-only reply and internal-note tools.
+
+For status transitions and assignments, chat-management can return a `proposedActions` array. FeedApp renders each proposed action as a confirmation card in the assistant. Confirmed actions post to `/api/agent/actions` and execute through the existing FeedApp case service with the current user's permissions; dismissed, confirmed, and failed actions are audited.
 
 ## Architecture Direction
 

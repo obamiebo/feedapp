@@ -1,4 +1,4 @@
-import { CheckCircle2, ClipboardList, History, KeyRound, Send, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { Bot, CheckCircle2, ClipboardList, History, KeyRound, MessageSquare, Send, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -16,17 +16,18 @@ import {
   canEnterApplication,
   canApproveCustomerReply,
   canAssignCase,
-  canManageProductRoster,
   canRequestCustomerReplyApproval,
   canTransitionCase
 } from "@/lib/access-control";
 import { appRedirectLocation } from "@/lib/public-url";
 import { resolveCurrentUser } from "@/lib/current-user";
+import { getSessionToken } from "@/lib/session-cookie";
 import { isSlaAtRisk, isSlaBreached } from "@/lib/sla";
 import { customerReplyApprovalSchema, internalNoteSchema } from "@/lib/validation";
 import { getAllowedTransitions } from "@/lib/workflow";
 import { createPrismaUserRepository } from "@/repositories/users";
 import { buildCaseTimeline } from "@/services/case-timeline";
+import { createCaseTagService } from "@/services/case-tags";
 import { createCaseService } from "@/services/cases";
 import {
   createCustomerRecommendationService,
@@ -34,6 +35,7 @@ import {
   handledRecommendationIdsFromAuditLogs
 } from "@/services/customer-recommendations";
 import { suggestCustomerReply } from "@/services/customer-reply-suggestions";
+import { createAgentBotService, isFeedbackAgentEnabled } from "@/services/agent-bot";
 
 export const dynamic = "force-dynamic";
 
@@ -218,6 +220,35 @@ async function requestCustomerReplyApprovalAction(formData: FormData) {
   redirectToCaseFromForm(formData, parsed.data.caseId);
 }
 
+async function generateBotReplyDraftAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const sessionToken = await getSessionToken();
+  const caseId = String(formData.get("caseId") ?? "");
+  const channel = String(formData.get("channel") ?? "");
+
+  if (!currentUser || !sessionToken) {
+    redirect("/login");
+  }
+
+  if (!caseId || (channel !== "Email" && channel !== "SMS")) {
+    throw new Error("Invalid bot reply generation request");
+  }
+
+  await createAgentBotService().generateCustomerReplyDraftForUser(
+    {
+      caseId,
+      channel,
+      userSessionToken: sessionToken
+    },
+    currentUser
+  );
+
+  revalidatePath(`/cases/${caseId}`);
+  redirectToCaseFromForm(formData, caseId);
+}
+
 async function sendCustomerReplyAction(formData: FormData) {
   "use server";
 
@@ -351,6 +382,48 @@ async function rejectCustomerReplyAction(formData: FormData) {
   redirectToCaseFromForm(formData, caseId);
 }
 
+async function assignCaseTagAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const caseId = String(formData.get("caseId") ?? "");
+  const tagId = String(formData.get("tagId") ?? "");
+
+  if (!currentUser) {
+    redirect("/login");
+  }
+
+  if (!caseId || !tagId) {
+    throw new Error("Invalid case tag assignment");
+  }
+
+  await createCaseTagService().assignTagForUser({ caseId, tagId }, currentUser);
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath("/");
+  redirectToCaseFromForm(formData, caseId);
+}
+
+async function removeCaseTagAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const caseId = String(formData.get("caseId") ?? "");
+  const tagId = String(formData.get("tagId") ?? "");
+
+  if (!currentUser) {
+    redirect("/login");
+  }
+
+  if (!caseId || !tagId) {
+    throw new Error("Invalid case tag removal");
+  }
+
+  await createCaseTagService().removeTagForUser({ caseId, tagId }, currentUser);
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath("/");
+  redirectToCaseFromForm(formData, caseId);
+}
+
 function formatDate(value?: Date | null) {
   if (!value) return "Not set";
 
@@ -440,11 +513,13 @@ export default async function CaseDetailPage({
   }
 
   const caseDetail = caseAccess.caseDetail;
+  const assignedTags = caseDetail.tags ?? [];
 
   const recommendationService = createCustomerRecommendationService();
-  const [users, recommendations] = await Promise.all([
+  const [users, recommendations, productTags] = await Promise.all([
     createPrismaUserRepository().listAssignableUsersByProductSourceKey(caseDetail.sourceSystem),
-    recommendationService.listForCase(caseDetail, currentUser)
+    recommendationService.listForCase(caseDetail, currentUser),
+    createCaseTagService().listTagsForSourceForUser(caseDetail.sourceSystem, currentUser).catch(() => [])
   ]);
 
   const allowedTransitions = getAllowedTransitions(caseDetail.status);
@@ -455,8 +530,12 @@ export default async function CaseDetailPage({
   const timeline = buildCaseTimeline(caseDetail);
   const visibleTimeline = timeline.slice(0, VISIBLE_TIMELINE_COUNT);
   const olderTimeline = timeline.slice(VISIBLE_TIMELINE_COUNT);
+  const conversationMessages = caseDetail.messages
+    .filter((message) => message.channel !== "Internal Note")
+    .slice()
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   const canAssign = currentUser ? canAssignCase(currentUser, caseDetail) : false;
-  const canManageReps = currentUser ? canManageProductRoster(currentUser, caseDetail.sourceSystem) : false;
+  const unassignedProductTags = productTags.filter((tag) => !assignedTags.some((assigned) => assigned.id === tag.id));
   const canAddNote = currentUser ? canAddInternalNote(currentUser, caseDetail) : false;
   const canRequestReplyApproval = currentUser ? canRequestCustomerReplyApproval(currentUser, caseDetail) : false;
   const canSendCustomerReply = currentUser ? canApproveCustomerReply(currentUser, caseDetail) : false;
@@ -469,6 +548,7 @@ export default async function CaseDetailPage({
     currentUser && canRequestReplyApproval ? await caseService.getCustomerReplySuggestionForUser(caseDetail.id, currentUser) : null;
   const customerReplyApprovalRoute =
     currentUser && canRequestReplyApproval ? await caseService.getCustomerReplyApprovalRouteForUser(caseDetail.id, currentUser) : null;
+  const canGenerateBotReply = isFeedbackAgentEnabled() && canRequestReplyApproval && Boolean(customerReplyApprovalRoute);
   const suggestedReply = customerReplySuggestion
     ? suggestCustomerReply(caseDetail, { staleFollowUp: customerReplySuggestion.staleFollowUp })
     : "";
@@ -508,19 +588,51 @@ export default async function CaseDetailPage({
             <div className="p-5">
               <p className="text-sm text-ink">{caseDetail.description}</p>
               <div className="my-5 border-t border-[#aebdd0]" />
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted">Product</div>
-                  <div className="mt-1 text-sm font-medium text-ink">
-                    {caseDetail.productName ?? caseDetail.sourceSystem}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="sm:col-span-2 xl:col-span-1">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted">Tags</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {assignedTags.length > 0 ? (
+                      assignedTags.map((tag) => (
+                        <form key={tag.id} action={removeCaseTagAction}>
+                          <input name="caseId" type="hidden" value={caseDetail.id} />
+                          <input name="tagId" type="hidden" value={tag.id} />
+                          <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                          {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
+                          <button
+                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white"
+                            style={{ backgroundColor: tag.color }}
+                            type="submit"
+                            title="Remove tag"
+                          >
+                            {tag.name}
+                            <XCircle size={12} aria-hidden="true" />
+                          </button>
+                        </form>
+                      ))
+                    ) : (
+                      <span className="text-sm font-medium text-ink">No tags</span>
+                    )}
                   </div>
-                  {canManageReps ? (
-                    <Link
-                      className="mt-1 inline-flex text-xs font-medium text-brand hover:text-brand-dark"
-                      href={`/settings/products?sourceId=${encodeURIComponent(caseDetail.sourceSystem)}`}
-                    >
-                      Manage reps
-                    </Link>
+                  {unassignedProductTags.length > 0 ? (
+                    <form action={assignCaseTagAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center xl:flex-col xl:items-stretch">
+                      <input name="caseId" type="hidden" value={caseDetail.id} />
+                      <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                      {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
+                      <select name="tagId" className={inputClass} aria-label="Add case tag" required>
+                        {unassignedProductTags.map((tag) => (
+                          <option key={tag.id} value={tag.id}>
+                            {tag.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="inline-flex items-center justify-center rounded-md border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-panel-muted"
+                        type="submit"
+                      >
+                        Add
+                      </button>
+                    </form>
                   ) : null}
                 </div>
                 <div>
@@ -777,6 +889,31 @@ export default async function CaseDetailPage({
             </section>
           ) : null}
 
+          {canGenerateBotReply ? (
+            <section className={cardClass}>
+              <div className={cardHeaderClass}>
+                <Bot size={18} className="text-accent" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-ink">Bot reply draft</h2>
+                <span className="ml-auto text-xs text-muted">Draft only</span>
+              </div>
+              <form action={generateBotReplyDraftAction} className="flex flex-col gap-3 p-5">
+                <input name="caseId" type="hidden" value={caseDetail.id} />
+                <input name="sourceSystem" type="hidden" value={sourceSystemParam ?? caseDetail.sourceSystem} />
+                {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
+                <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="bot-channel">
+                  Channel
+                  <select id="bot-channel" name="channel" defaultValue="Email" className={inputClass}>
+                    <option value="Email">Email</option>
+                    <option value="SMS">SMS</option>
+                  </select>
+                </label>
+                <button className={`${primaryButtonClass} w-fit`} type="submit">
+                  <Bot size={15} /> Generate draft
+                </button>
+              </form>
+            </section>
+          ) : null}
+
           <Disclosure summary="Add internal note">
             {canAddNote && currentUser ? (
               <form action={addInternalNoteAction} className="flex flex-col gap-3">
@@ -896,12 +1033,59 @@ export default async function CaseDetailPage({
             </div>
           </Disclosure>
 
-          <section className={cardClass}>
-            <div className={cardHeaderClass}>
-              <History size={18} className="text-muted" aria-hidden="true" />
-              <h2 className="text-sm font-semibold text-ink">Activity timeline</h2>
-            </div>
-            <div className="flex flex-col gap-3 p-5">
+          <Disclosure
+            defaultOpen={conversationMessages.length > 0}
+            summary={
+              <span className="flex items-center gap-2">
+                <MessageSquare size={16} className="text-muted" aria-hidden="true" />
+                Conversation
+              </span>
+            }
+          >
+            {conversationMessages.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {conversationMessages.map((message) => {
+                  const outbound = message.direction === "outbound";
+                  return (
+                    <div key={message.id} className={`flex ${outbound ? "items-end" : "items-start"} flex-col gap-1`}>
+                      <div
+                        className={`max-w-full rounded-md border px-3 py-2 ${
+                          outbound
+                            ? "border-brand/30 bg-brand/10 text-ink"
+                            : "border-line bg-panel-subtle text-ink"
+                        }`}
+                      >
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <StatusBadge label={outbound ? "Team" : "Customer"} tone={outbound ? "ok" : "info"} />
+                          <StatusBadge label={message.channel} tone="neutral" />
+                          {outbound ? (
+                            <StatusBadge
+                              label={message.deliveryStatus}
+                              tone={message.deliveryStatus === "Failed" ? "critical" : "info"}
+                            />
+                          ) : null}
+                        </div>
+                        <p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">{message.body}</p>
+                      </div>
+                      <span className="text-xs text-muted">{formatDate(message.createdAt)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState icon={MessageSquare} message="No customer conversation yet." />
+            )}
+          </Disclosure>
+
+          <Disclosure
+            summary={
+              <span className="flex items-center gap-2">
+                <History size={16} className="text-muted" aria-hidden="true" />
+                Activity timeline
+              </span>
+            }
+          >
+            <div className="flex flex-col gap-3">
               {timeline.length > 0 ? (
                 <>
                   {visibleTimeline.map((item) => (
@@ -941,7 +1125,7 @@ export default async function CaseDetailPage({
                 <EmptyState icon={History} message="No activity yet." />
               )}
             </div>
-          </section>
+          </Disclosure>
         </aside>
       </div>
     </AppShell>

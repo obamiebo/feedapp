@@ -185,13 +185,6 @@ function messageTimelineItem(message: CaseDetail["messages"][number]): CaseTimel
 }
 
 export function buildCaseTimeline(caseDetail: Pick<CaseDetail, "auditLogs" | "messages" | "approvals">) {
-  const sentReplyBodies = new Set(
-    caseDetail.auditLogs
-      .filter((auditLog) => auditLog.action === "case.customer_reply_sent" || auditLog.action === "case.reply_approved")
-      .map((auditLog) => metadataValue(auditLog.metadata, "body"))
-      .filter((body): body is string => Boolean(body))
-  );
-
   return [
     ...caseDetail.auditLogs
       .filter(
@@ -201,8 +194,6 @@ export function buildCaseTimeline(caseDetail: Pick<CaseDetail, "auditLogs" | "me
           auditLog.action !== "case.reply_approval_requested"
       )
       .map(auditTimelineItem),
-    ...caseDetail.messages
-      .filter((message) => !(message.direction === "outbound" && sentReplyBodies.has(message.body)))
-      .map(messageTimelineItem)
+    ...caseDetail.messages.filter((message) => message.channel === "Internal Note").map(messageTimelineItem)
   ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
 }

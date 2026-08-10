@@ -46,6 +46,15 @@ export const ingestionReportQuerySchema = z.object({
   cursor: z.string().min(1).optional()
 });
 
+export const ingestionReportMessageSchema = z.object({
+  channel: z.enum(["Email", "SMS"]),
+  body: z.string().min(1),
+  externalMessageId: z.string().min(1).optional(),
+  customerName: z.string().min(1).optional(),
+  customerEmail: z.string().email().optional(),
+  customerPhone: z.string().min(1).optional()
+});
+
 export const statusUpdateSchema = z.object({
   status: z.enum(caseStatuses),
   note: z.string().optional()

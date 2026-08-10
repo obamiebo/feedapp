@@ -5,6 +5,7 @@ import {
   canCreateCase,
   canEnterApplication,
   canEscalateCase,
+  canManageProductTags,
   canApproveCustomerReply,
   canManageProductKnowledge,
   canManageProductRoster,
@@ -115,6 +116,18 @@ describe("access control", () => {
     expect(canManageProductKnowledge(baseUser, "manual")).toBe(false);
     expect(canSearchProductKnowledge(baseUser, "manual")).toBe(true);
     expect(canSearchProductKnowledge(baseUser, "other-product")).toBe(false);
+  });
+
+  it("allows product managers to manage tags for products in their visible scope", () => {
+    expect(canManageProductTags({ ...baseUser, roles: ["Admin"], productSourceKeys: [] }, "manual")).toBe(true);
+    expect(
+      canManageProductTags(
+        { ...baseUser, roles: ["Product Manager"], directProductSourceKeys: [], productSourceKeys: ["manual"] },
+        "manual"
+      )
+    ).toBe(true);
+    expect(canManageProductTags({ ...baseUser, roles: ["Product Manager"], productSourceKeys: ["manual"] }, "other-product")).toBe(false);
+    expect(canManageProductTags(baseUser, "manual")).toBe(false);
   });
 
   it("keeps admin configuration separate from case operations", () => {

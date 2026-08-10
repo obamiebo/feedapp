@@ -36,6 +36,12 @@ export type PendingCustomerReplyApproval = Approval & {
 };
 
 export type MessageRepository = {
+  createInboundCustomerMessage(input: {
+    caseId: string;
+    channel: Exclude<DomainMessageChannel, "Internal Note">;
+    body: string;
+    externalMessageId?: string;
+  }): Promise<Message>;
   createInternalNote(input: { caseId: string; body: string }): Promise<Message>;
   createApprovalRequest(input: {
     caseId: string;
@@ -98,6 +104,20 @@ function pendingApprovalWhere(user: AppUser) {
 
 export function createPrismaMessageRepository(client: PrismaClient = prisma): MessageRepository {
   return {
+    createInboundCustomerMessage(input) {
+      return client.message.create({
+        data: {
+          caseId: input.caseId,
+          channel: mapMessageChannelToPrisma(input.channel),
+          direction: "inbound",
+          approvalStatus: "APPROVED",
+          deliveryStatus: "NOT_REQUIRED",
+          providerMessageId: input.externalMessageId,
+          body: input.body
+        }
+      });
+    },
+
     createInternalNote(input) {
       return client.message.create({
         data: {

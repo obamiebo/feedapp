@@ -1,5 +1,5 @@
 import type { AppUser } from "@/domain/types";
-import { canManageAdmin, canManageAnyProductRoster } from "@/lib/access-control";
+import { canManageAdmin, canManageAnyProductRoster, canManageAnyProductTags } from "@/lib/access-control";
 
 export type SettingsHref =
   | "/settings"
@@ -11,7 +11,7 @@ export type SettingsHref =
 
 export function canAccessSettingsHref(user: AppUser, href: SettingsHref): boolean {
   if (href === "/settings/products") {
-    return canManageAdmin(user) || canManageAnyProductRoster(user);
+    return canManageAdmin(user) || canManageAnyProductRoster(user) || canManageAnyProductTags(user);
   }
 
   if (href === "/settings/messaging" || href === "/settings/operations" || href === "/settings/audit") {
@@ -35,7 +35,7 @@ export function settingsCardDescriptionForUser(
   }
 
   if (href === "/settings/products" && !canManageAdmin(user)) {
-    return "Manage product rosters for products where you have direct Product Manager access.";
+    return "Manage product tags for products in your Product Manager scope, plus rosters and knowledge where you have direct access.";
   }
 
   return defaultDescription;

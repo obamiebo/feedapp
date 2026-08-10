@@ -1,4 +1,4 @@
-import { BookOpen, Boxes, RefreshCw, ShieldCheck, Trash2, UsersRound, XCircle } from "lucide-react";
+import { BookOpen, Boxes, RefreshCw, ShieldCheck, Tags, Trash2, UsersRound, XCircle } from "lucide-react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
@@ -7,14 +7,17 @@ import { ProductGroupDialog } from "@/components/product-group-dialog";
 import { ProductKnowledgeDialog } from "@/components/product-knowledge-dialog";
 import { ProductSourceDialog } from "@/components/product-source-dialog";
 import { ProductRosterUserDialog } from "@/components/product-roster-user-dialog";
+import { ProductTagDialog } from "@/components/product-tag-dialog";
+import { ProductTagRowActions } from "@/components/product-tag-row-actions";
 import { AutoSubmitSelect } from "@/components/ui/auto-submit-select";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DataTable } from "@/components/ui/data-table";
 import type { AdminProductGroup, AdminProductSource, ProductRosterMember } from "@/services/admin";
 import type { ProductKnowledgeDocumentRecord, ProductKnowledgeDocumentType } from "@/repositories/product-knowledge";
-import { canManageAdmin, canManageAnyProductRoster } from "@/lib/access-control";
+import { canManageAdmin, canManageAnyProductRoster, canManageAnyProductTags } from "@/lib/access-control";
 import { resolveCurrentUser } from "@/lib/current-user";
 import { createAdminService } from "@/services/admin";
+import { createCaseTagService } from "@/services/case-tags";
 import { createProductKnowledgeService } from "@/services/product-knowledge";
 
 export const dynamic = "force-dynamic";
@@ -293,6 +296,46 @@ async function removeProductRosterUserAction(formData: FormData) {
   redirect(`/settings/products?sourceId=${encodeURIComponent(sourceId)}`);
 }
 
+async function createCaseTagAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const sourceKey = String(formData.get("sourceKey") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const color = String(formData.get("color") ?? "#244f89").trim();
+  const description = String(formData.get("description") ?? "").trim();
+
+  if (!currentUser || !sourceKey || name.length < 2) {
+    throw new Error("Valid product tag details are required");
+  }
+
+  await createCaseTagService().createTagForUser({ sourceKey, name, color, description }, currentUser);
+  revalidatePath("/settings/products");
+  redirect(`/settings/products?sourceId=${encodeURIComponent(sourceKey)}`);
+}
+
+async function updateCaseTagAction(formData: FormData) {
+  "use server";
+
+  const currentUser = await resolveCurrentUser();
+  const sourceKey = String(formData.get("sourceKey") ?? "").trim();
+  const tagId = String(formData.get("tagId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const color = String(formData.get("color") ?? "#244f89").trim();
+  const description = String(formData.get("description") ?? "").trim();
+
+  if (!currentUser || !sourceKey || !tagId || name.length < 2) {
+    throw new Error("Valid product tag details are required");
+  }
+
+  await createCaseTagService().updateTagForUser(
+    { tagId, name, color, description, active: checkboxValue(formData, "active") },
+    currentUser
+  );
+  revalidatePath("/settings/products");
+  redirect(`/settings/products?sourceId=${encodeURIComponent(sourceKey)}`);
+}
+
 const productKnowledgeDocumentTypes = new Set<ProductKnowledgeDocumentType>([
   "faq",
   "manual",
@@ -420,8 +463,9 @@ export default async function SettingsProductsPage({
 
   const canManagePlatform = canManageAdmin(currentUser);
   const canManageRosters = canManageAnyProductRoster(currentUser);
+  const canManageTags = canManageAnyProductTags(currentUser);
 
-  if (!canManagePlatform && !canManageRosters) {
+  if (!canManagePlatform && !canManageRosters && !canManageTags) {
     return (
       <section className="rounded-lg border border-line bg-panel p-6 shadow-sm">
         <EmptyState icon={ShieldCheck} message="Product settings are only available to platform admins and product managers." />
@@ -468,8 +512,19 @@ export default async function SettingsProductsPage({
       : Promise.resolve({ productGroups: [], productSources: [] }),
     adminService.getProductRosterDirectory(currentUser, selectedSourceId)
   ]);
-  const productKnowledgeDocuments = rosterDirectory.selectedSource
-    ? await createProductKnowledgeService().listForUser(rosterDirectory.selectedSource.key, currentUser)
+  const rosterManageSources = rosterDirectory.productSources.filter((source) => source.canManageRoster);
+  const tagManageSources = rosterDirectory.productSources.filter((source) => source.canManageTags);
+  const selectedRosterSource = rosterDirectory.selectedSource?.canManageRoster
+    ? rosterDirectory.selectedSource
+    : (rosterManageSources[0] ?? null);
+  const selectedTagSource = rosterDirectory.selectedSource?.canManageTags
+    ? rosterDirectory.selectedSource
+    : (tagManageSources[0] ?? null);
+  const productKnowledgeDocuments = selectedRosterSource
+    ? await createProductKnowledgeService().listForUser(selectedRosterSource.key, currentUser)
+    : [];
+  const caseTags = selectedTagSource
+    ? await createCaseTagService().listTagsForSourceForUser(selectedTagSource.key, currentUser, true)
     : [];
   const teamDirectory = canManagePlatform ? await adminService.getTeamDirectory() : null;
   const productManagerOptions =
@@ -519,30 +574,28 @@ export default async function SettingsProductsPage({
           <h2 className="text-sm font-semibold text-ink">Product reps</h2>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          {rosterDirectory.selectedSource ? (
+          {selectedRosterSource ? (
             <form className="min-w-[260px]" method="get">
               <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="roster-source">
                 Product
                 <AutoSubmitSelect
                   id="roster-source"
                   name="sourceId"
-                  defaultValue={rosterDirectory.selectedSource.id}
+                  defaultValue={selectedRosterSource.id}
                   className={inputClass}
-                  options={rosterDirectory.productSources
-                    .filter((source) => source.canManageRoster)
-                    .map((source) => ({ value: source.id, label: source.name }))}
+                  options={rosterManageSources.map((source) => ({ value: source.id, label: source.name }))}
                 />
               </label>
             </form>
           ) : null}
           <ProductRosterUserDialog
             action={addProductRosterUserAction}
-            selectedSource={rosterDirectory.selectedSource}
+            selectedSource={selectedRosterSource}
             users={teamDirectory?.users}
           />
         </div>
       </div>
-      {rosterDirectory.selectedSource ? (
+      {selectedRosterSource ? (
         <div className="flex flex-col gap-4 p-5">
           {rosterErrorMessage ? (
             <div className="rounded-md border border-critical/30 bg-critical-bg px-3 py-2 text-sm text-critical">
@@ -590,7 +643,7 @@ export default async function SettingsProductsPage({
                   render: (member) =>
                     member.direct ? (
                       <form action={removeProductRosterUserAction}>
-                        <input name="sourceId" type="hidden" value={rosterDirectory.selectedSource?.id} />
+                        <input name="sourceId" type="hidden" value={selectedRosterSource.id} />
                         <input name="userId" type="hidden" value={member.id} />
                         <ConfirmSubmitButton
                           className="inline-flex items-center gap-1 text-sm font-medium text-critical"
@@ -628,30 +681,28 @@ export default async function SettingsProductsPage({
           <h2 className="text-sm font-semibold text-ink">Product knowledge</h2>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          {rosterDirectory.selectedSource ? (
+          {selectedRosterSource ? (
             <form className="min-w-[260px]" method="get">
               <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="knowledge-source">
                 Product
                 <AutoSubmitSelect
                   id="knowledge-source"
                   name="sourceId"
-                  defaultValue={rosterDirectory.selectedSource.id}
+                  defaultValue={selectedRosterSource.id}
                   className={inputClass}
-                  options={rosterDirectory.productSources
-                    .filter((source) => source.canManageRoster)
-                    .map((source) => ({ value: source.id, label: source.name }))}
+                  options={rosterManageSources.map((source) => ({ value: source.id, label: source.name }))}
                 />
               </label>
             </form>
           ) : null}
           <ProductKnowledgeDialog
             action={uploadProductKnowledgeAction}
-            productSourceKey={rosterDirectory.selectedSource?.key}
-            disabled={!rosterDirectory.selectedSource}
+            productSourceKey={selectedRosterSource?.key}
+            disabled={!selectedRosterSource}
           />
         </div>
       </div>
-      {rosterDirectory.selectedSource ? (
+      {selectedRosterSource ? (
         <div className="flex flex-col gap-4 p-5">
           {knowledgeErrorMessage ? (
             <div className="rounded-md border border-critical/30 bg-critical-bg px-3 py-2 text-sm text-critical">
@@ -694,7 +745,7 @@ export default async function SettingsProductsPage({
                   render: (document) => (
                     <div className="flex flex-wrap gap-3">
                       <form action={refreshProductKnowledgeStatusAction}>
-                        <input name="productSourceKey" type="hidden" value={rosterDirectory.selectedSource?.key} />
+                        <input name="productSourceKey" type="hidden" value={selectedRosterSource.key} />
                         <input name="documentServiceId" type="hidden" value={document.documentServiceId} />
                         <input name="processingTaskId" type="hidden" value={document.processingTaskId ?? ""} />
                         <ConfirmSubmitButton
@@ -707,7 +758,7 @@ export default async function SettingsProductsPage({
                         </ConfirmSubmitButton>
                       </form>
                       <form action={deleteProductKnowledgeAction}>
-                        <input name="productSourceKey" type="hidden" value={rosterDirectory.selectedSource?.key} />
+                        <input name="productSourceKey" type="hidden" value={selectedRosterSource.key} />
                         <input name="documentServiceId" type="hidden" value={document.documentServiceId} />
                         <ConfirmSubmitButton
                           className="inline-flex items-center gap-1 text-sm font-medium text-critical"
@@ -736,9 +787,83 @@ export default async function SettingsProductsPage({
     </section>
   );
 
+  const tagSection = (
+    <section className="rounded-lg border border-line bg-panel shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-line px-5 py-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex items-start gap-2">
+          <Tags size={18} className="mt-0.5 text-muted" aria-hidden="true" />
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Product tags</h2>
+            <p className="mt-1 text-sm text-muted">Create and edit the tags available to cases for the selected product.</p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          {selectedTagSource ? (
+            <form className="min-w-[260px]" method="get">
+              <label className="flex flex-col gap-1 text-sm text-muted" htmlFor="tag-source">
+                Product
+                <AutoSubmitSelect
+                  id="tag-source"
+                  name="sourceId"
+                  defaultValue={selectedTagSource.id}
+                  className={inputClass}
+                  options={tagManageSources.map((source) => ({ value: source.id, label: source.name }))}
+                />
+              </label>
+            </form>
+          ) : null}
+          <ProductTagDialog
+            action={createCaseTagAction}
+            productSources={rosterDirectory.productSources}
+            selectedSourceKey={selectedTagSource?.key}
+            disabled={!selectedTagSource}
+          />
+        </div>
+      </div>
+      {selectedTagSource ? (
+        <div className="p-2">
+          <DataTable
+            columns={[
+              {
+                key: "tag",
+                header: "Tag",
+                render: (tag) => (
+                  <div className="flex items-center gap-2">
+                    <span className="size-3 rounded-full" style={{ backgroundColor: tag.color }} />
+                    <div>
+                      <div className="font-medium text-ink">{tag.name}</div>
+                      <div className="text-xs text-muted">{tag.description || "No description"}</div>
+                    </div>
+                  </div>
+                )
+              },
+              { key: "cases", header: "Cases", render: (tag) => tag.caseCount },
+              { key: "status", header: "Status", render: (tag) => (tag.active ? "Active" : "Inactive") },
+              {
+                key: "actions",
+                header: "Edit",
+                className: "min-w-[110px]",
+                render: (tag) => <ProductTagRowActions action={updateCaseTagAction} sourceKey={selectedTagSource.key} tag={tag} />
+              }
+            ]}
+            rows={caseTags}
+            getRowKey={(tag) => tag.id}
+            emptyIcon={Tags}
+            emptyMessage="No tags have been created for this product yet."
+          />
+        </div>
+      ) : (
+        <div className="p-6">
+          <EmptyState icon={Tags} message="No directly managed products are available for tag management." />
+        </div>
+      )}
+    </section>
+  );
+
   return canManagePlatform ? (
     <div className="flex flex-col gap-6">
       {rosterSection}
+      {tagSection}
       {productKnowledgeSection}
 
       <section className="rounded-lg border border-line bg-panel shadow-sm">
@@ -856,6 +981,7 @@ export default async function SettingsProductsPage({
   ) : (
     <div className="flex max-w-4xl flex-col gap-6">
       {rosterSection}
+      {tagSection}
       {productKnowledgeSection}
     </div>
   );

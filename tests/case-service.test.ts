@@ -68,6 +68,7 @@ function makeDependencies(initialCase = makeCase(), options: { callbacksEnabled?
   let currentCase = initialCase;
   const auditEvents: CreateAuditLogRecord[] = [];
   const createdRecords: CreateCaseRecord[] = [];
+  const inboundMessages: Array<{ caseId: string; channel: string; body: string; externalMessageId?: string }> = [];
   const internalNotes: Array<{ caseId: string; body: string }> = [];
   const approvalRequests: Array<{ caseId: string; channel: string; draftBody: string; requestedReviewerId?: string | null }> = [];
   const approvedMessages: Array<{ caseId: string; channel: string; body: string }> = [];
@@ -232,6 +233,7 @@ function makeDependencies(initialCase = makeCase(), options: { callbacksEnabled?
     approvedMessages,
     createdRecords,
     createdStages,
+    inboundMessages,
     internalNotes,
     listFilters,
     markedDeliveries,
@@ -260,6 +262,20 @@ function makeDependencies(initialCase = makeCase(), options: { callbacksEnabled?
         }
       },
       messages: {
+        async createInboundCustomerMessage(input) {
+          inboundMessages.push(input);
+          return makeMessage({
+            id: "message-inbound-1",
+            caseId: input.caseId,
+            channel: input.channel === "SMS" ? "SMS" : "EMAIL",
+            direction: "inbound",
+            body: input.body,
+            providerMessageId: input.externalMessageId ?? null,
+            approvalStatus: "APPROVED",
+            deliveryStatus: "NOT_REQUIRED",
+            createdAt: new Date("2026-07-07T12:00:00.000Z")
+          });
+        },
         async createInternalNote(input) {
           internalNotes.push(input);
           return makeMessage({
@@ -662,7 +678,7 @@ describe("case service", () => {
   it("creates cases with SLA deadlines and audit events", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-07T10:00:00.000Z"));
-    const { auditEvents, createdRecords, createdStages, service } = makeDependencies();
+    const { auditEvents, createdRecords, createdStages, inboundMessages, service } = makeDependencies();
 
     const created = await service.createCase(
       {
@@ -685,6 +701,13 @@ describe("case service", () => {
         status: "New",
         priority: "High"
       })
+    ]);
+    expect(inboundMessages).toEqual([
+      {
+        caseId: "case-created",
+        channel: "Email",
+        body: "Customer cannot complete checkout."
+      }
     ]);
     expect(auditEvents).toEqual([
       expect.objectContaining({
@@ -766,7 +789,7 @@ describe("case service", () => {
   });
 
   it("allows customer service users to create manual cases", async () => {
-    const { createdRecords, service } = makeDependencies();
+    const { createdRecords, inboundMessages, service } = makeDependencies();
 
     await service.createManualCaseForUser(
       {
@@ -782,6 +805,11 @@ describe("case service", () => {
     );
 
     expect(createdRecords[0]).toEqual(expect.objectContaining({ customerId: "customer-created" }));
+    expect(inboundMessages[0]).toEqual({
+      caseId: "case-created",
+      channel: "Email",
+      body: "Customer called the support desk."
+    });
   });
 
   it("denies customer service users creating cases for products outside their scope", async () => {
@@ -1369,6 +1397,71 @@ describe("case service", () => {
         responseStatus: 200
       })
     ]);
+  });
+
+  it("records inbound customer replies for product-owned cases", async () => {
+    const { auditEvents, inboundMessages, service } = makeDependencies(makeCase({ externalId: "COM-9001" }));
+
+    const result = await service.recordInboundCustomerReplyForSource({
+      sourceKey: "manual",
+      caseId: "COM-9001",
+      channel: "Email",
+      body: "This is still failing.",
+      externalMessageId: "email-123",
+      customer: { email: "customer@example.com" }
+    });
+
+    expect(result.reopened).toBe(false);
+    expect(result.message).toEqual(
+      expect.objectContaining({
+        direction: "inbound",
+        body: "This is still failing.",
+        externalMessageId: "email-123"
+      })
+    );
+    expect(inboundMessages.at(-1)).toEqual({
+      caseId: "case-1",
+      channel: "Email",
+      body: "This is still failing.",
+      externalMessageId: "email-123"
+    });
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        caseId: "case-1",
+        action: "case.customer_reply_received",
+        metadata: expect.objectContaining({
+          channel: "Email",
+          externalMessageId: "email-123",
+          reopened: false
+        })
+      })
+    );
+  });
+
+  it("reopens resolved cases when customers reply", async () => {
+    const { auditEvents, callbackAttempts, service, stageTransitions } = makeDependencies(
+      makeCase({ status: "Resolved", externalId: "COM-9001" }),
+      { callbacksEnabled: true }
+    );
+
+    const result = await service.recordInboundCustomerReplyForSource({
+      sourceKey: "manual",
+      caseId: "COM-9001",
+      channel: "SMS",
+      body: "It is not fixed."
+    });
+
+    expect(result.reopened).toBe(true);
+    expect(result.case.status).toBe("Reopened");
+    expect(stageTransitions).toContainEqual(expect.objectContaining({ caseId: "case-1", status: "Reopened" }));
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        caseId: "case-1",
+        action: "case.status_changed",
+        metadata: expect.objectContaining({ from: "Resolved", to: "Reopened", reason: "customer_reply" })
+      })
+    );
+    expect(callbackAttempts).toContainEqual(expect.objectContaining({ caseId: "case-1", eventType: "case.status_changed" }));
   });
 
   it("returns an initial customer reply suggestion for a new active stage", async () => {

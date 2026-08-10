@@ -76,7 +76,7 @@ describe("settings access", () => {
     expect(canAccessSettingsHref(productManager, "/settings/audit")).toBe(false);
   });
 
-  it("does not show product settings to product managers with only group-derived access", () => {
+  it("shows product settings to product managers with group-derived access for tag management", () => {
     const groupDerivedProductManager = makeUser({
       roles: ["Product Manager"],
       directProductSourceKeys: [],
@@ -84,15 +84,19 @@ describe("settings access", () => {
       productGroupIds: ["group-commerce"]
     });
 
-    expect(visibleSettingsHrefs(groupDerivedProductManager, allSettingsHrefs)).toEqual(["/settings", "/settings/team"]);
-    expect(canAccessSettingsHref(groupDerivedProductManager, "/settings/products")).toBe(false);
+    expect(visibleSettingsHrefs(groupDerivedProductManager, allSettingsHrefs)).toEqual([
+      "/settings",
+      "/settings/team",
+      "/settings/products"
+    ]);
+    expect(canAccessSettingsHref(groupDerivedProductManager, "/settings/products")).toBe(true);
   });
 
   it("uses scoped descriptions for non-admin visible settings cards", () => {
     const productManager = makeUser({ roles: ["Product Manager"], directProductSourceKeys: ["commerce-platform"] });
 
     expect(settingsCardDescriptionForUser(productManager, "/settings/team", "default")).toContain("visible product scope");
-    expect(settingsCardDescriptionForUser(productManager, "/settings/products", "default")).toContain("direct Product Manager access");
+    expect(settingsCardDescriptionForUser(productManager, "/settings/products", "default")).toContain("Product Manager scope");
     expect(settingsCardDescriptionForUser(makeUser({ ...productManager, roles: ["Admin"] }), "/settings/products", "default")).toBe(
       "default"
     );

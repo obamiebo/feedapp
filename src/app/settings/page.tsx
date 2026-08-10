@@ -20,7 +20,7 @@ const OVERVIEW_CARDS: Array<{ href: SettingsHref; icon: typeof UsersRound; title
     href: "/settings/products",
     icon: Boxes,
     title: "Products",
-    description: "Manage product sources, product groups, and rotate integration secrets."
+    description: "Manage product sources, product groups, tags, rosters, knowledge, and integration secrets."
   },
   {
     href: "/settings/messaging",

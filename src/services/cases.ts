@@ -80,6 +80,29 @@ export type CaseService = {
   requestCustomerReplyApprovalForUser(input: CustomerReplyApprovalInput, user: AppUser): Promise<{ id: string }>;
   approveCustomerReplyForUser(approvalId: string, user: AppUser, reviewedBody?: string): Promise<void>;
   rejectCustomerReplyForUser(approvalId: string, user: AppUser): Promise<void>;
+  recordInboundCustomerReplyForSource(input: {
+    sourceKey: string;
+    caseId: string;
+    channel: Exclude<MessageChannel, "Internal Note">;
+    body: string;
+    externalMessageId?: string;
+    customer?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+    };
+  }): Promise<{
+    message: {
+      id: string;
+      channel: Exclude<MessageChannel, "Internal Note">;
+      direction: string;
+      body: string;
+      externalMessageId: string | null;
+      createdAt: Date;
+    };
+    case: FeedbackCase;
+    reopened: boolean;
+  }>;
   listPendingCustomerReplyApprovalsForUser(user: AppUser, limit?: number): Promise<PendingCustomerReplyApproval[]>;
   retryFailedCustomerMessages(limit?: number): Promise<{ attempted: number; retried: number; failed: number }>;
   retryFailedProductCallbacks(limit?: number): Promise<{ attempted: number; retried: number; failed: number }>;
@@ -304,6 +327,17 @@ export function createCaseService(dependencies?: Partial<CaseServiceDependencies
     });
   }
 
+  async function recordInitialInboundFeedback(created: FeedbackCase) {
+    const caseDetail = await cases.getCaseDetail(created.id);
+    const channel = caseDetail ? (preferredCustomerChannel(caseDetail) ?? "Email") : "Email";
+
+    await messages.createInboundCustomerMessage({
+      caseId: created.id,
+      channel,
+      body: created.description
+    });
+  }
+
   async function sendResolutionNotification(updated: FeedbackCase, actorId?: string) {
     const closed = updated.status === "Closed";
     await sendLifecycleMessage({
@@ -438,6 +472,7 @@ export function createCaseService(dependencies?: Partial<CaseServiceDependencies
       startedAt: created.createdAt
     });
 
+    await recordInitialInboundFeedback(created);
     await sendNewCaseAcknowledgement(created, actorId);
 
     return created;
@@ -472,6 +507,17 @@ export function createCaseService(dependencies?: Partial<CaseServiceDependencies
 
   function mapApprovalChannel(channel: string): Exclude<MessageChannel, "Internal Note"> {
     return channel === "SMS" ? "SMS" : "Email";
+  }
+
+  async function resolveProductCase(sourceKey: string, caseId: string) {
+    const byExternalId = await cases.getCaseBySourceExternalId(sourceKey, caseId);
+
+    if (byExternalId) {
+      return byExternalId;
+    }
+
+    const byId = await cases.getCaseById(caseId);
+    return byId?.sourceSystem === sourceKey ? byId : null;
   }
 
   return {
@@ -994,6 +1040,69 @@ export function createCaseService(dependencies?: Partial<CaseServiceDependencies
           draftLength: approval.draftBody.length
         }
       });
+    },
+
+    async recordInboundCustomerReplyForSource(input) {
+      const existing = await resolveProductCase(input.sourceKey, input.caseId);
+
+      if (!existing) {
+        throw new Error("Case was not found for this product source");
+      }
+
+      const body = input.body.trim();
+      const message = await messages.createInboundCustomerMessage({
+        caseId: existing.id,
+        channel: input.channel,
+        body,
+        externalMessageId: input.externalMessageId
+      });
+      const shouldReopen = existing.status === "Resolved" || existing.status === "Closed";
+      const updated = shouldReopen ? await cases.updateStatus(existing.id, "Reopened") : existing;
+
+      if (shouldReopen) {
+        await caseStages.transitionToStage({
+          caseId: existing.id,
+          status: "Reopened",
+          priority: existing.priority,
+          startedAt: updated.updatedAt
+        });
+        await auditLogs.createAuditLog({
+          caseId: existing.id,
+          action: "case.status_changed",
+          metadata: {
+            from: existing.status,
+            to: "Reopened",
+            reason: "customer_reply"
+          }
+        });
+        await sendProductCallback(updated, "case.status_changed");
+      }
+
+      await auditLogs.createAuditLog({
+        caseId: existing.id,
+        action: "case.customer_reply_received",
+        metadata: {
+          channel: input.channel,
+          messageId: message.id,
+          externalMessageId: input.externalMessageId,
+          bodyLength: body.length,
+          reopened: shouldReopen,
+          customer: input.customer
+        }
+      });
+
+      return {
+        message: {
+          id: message.id,
+          channel: input.channel,
+          direction: message.direction,
+          body: message.body,
+          externalMessageId: message.providerMessageId,
+          createdAt: message.createdAt
+        },
+        case: updated,
+        reopened: shouldReopen
+      };
     },
 
     listPendingCustomerReplyApprovalsForUser(user, limit = 20) {

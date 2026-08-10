@@ -165,6 +165,7 @@ model Case {
   messages          Message[]
   approvals         Approval[]
   stages            CaseStage[]
+  tagAssignments    CaseTagAssignment[]
   auditLogs         AuditLog[]
   integrationEvents IntegrationEvent[]
   callbackAttempts  IntegrationCallbackAttempt[]
@@ -285,8 +286,41 @@ model IntegrationSource {
   callbackAttempts IntegrationCallbackAttempt[]
   userAccess UserProductAccess[]
   knowledgeDocuments ProductKnowledgeDocument[]
+  caseTags CaseTag[]
 
   @@index([groupId])
+}
+
+model CaseTag {
+  id          String              @id @default(cuid())
+  sourceId    String
+  name        String
+  color       String              @default("#244f89")
+  description String?
+  active      Boolean             @default(true)
+  createdById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  source      IntegrationSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  assignments CaseTagAssignment[]
+
+  @@unique([sourceId, name])
+  @@index([sourceId, active])
+  @@index([createdById])
+}
+
+model CaseTagAssignment {
+  id           String   @id @default(cuid())
+  caseId       String
+  tagId        String
+  assignedById String?
+  createdAt    DateTime @default(now())
+  case         Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  tag          CaseTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, tagId])
+  @@index([tagId])
+  @@index([assignedById])
 }
 
 model ProductKnowledgeDocument {

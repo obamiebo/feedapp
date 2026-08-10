@@ -199,6 +199,7 @@ Tasks:
 - `[x]` Replace department membership assignment with product and product-group access assignment.
 - `[x]` Implement product-scoped assignment eligibility for reps with direct or product-group access.
 - `[x]` Add product-manager roster administration for directly assigned products.
+- `[x]` Add product-scoped case tags for product-specific segmentation.
 - `[~]` Apply authorization checks to all protected pages and APIs.
 - `[~]` Add tests for unprovisioned users, role restrictions, product scoping, product-group scoping, product roster administration, case assignment visibility, customer recommendation scoping, and approval bypass prevention.
 
@@ -388,6 +389,7 @@ Tasks:
 - `[x]` Build integration source management screen.
 - `[x]` Build messaging provider configuration screen or environment-backed configuration view.
 - `[x]` Build product-scoped roster management for Product Managers with direct product access.
+- `[x]` Build product-scoped case tag management for Admins and directly assigned Product Managers.
 - `[ ]` Build audit log viewer.
 - `[~]` Add tests for admin-only access, scoped access views, and configuration changes.
 
@@ -539,13 +541,20 @@ Tasks:
 - `[ ]` Add product knowledge reindex action.
 - `[x]` Add FeedApp-owned MCP tool endpoint that calls application services, not the database directly.
 - `[x]` Add MCP tools for case context, product knowledge search, customer reply draft creation, and internal notes.
+- `[x]` Add MCP tools for feedback counts, filtered case lists, and next-action recommendations.
 - `[x]` Add FeedApp `verify_url` endpoint so chat-management can validate FeedApp session bearer tokens.
-- `[ ]` Register FeedApp as an application in chat-management and link only the FeedApp MCP server.
-- `[ ]` Add bot reply generation service that calls chat-management and stores draft-only approval requests.
-- `[ ]` Add case-detail UI action for generating a bot reply draft.
-- `[ ]` Add audit events for bot request, knowledge search, draft creation, and later approval/rejection.
-- `[ ]` Add observability for bot run ID, case ID, product source, tool calls, draft ID, and failure reason.
-- `[ ]` Roll out behind `FEEDBACK_AGENT_ENABLED`.
+- `[x]` Update ERID admin frontend so API-key MCP servers can be configured and application API keys can be copied safely.
+- `[x]` Fix ERID auth-service user creation email reporting and add ITC messaging provider support for invitation emails.
+- `[~]` Register FeedApp as an application in chat-management and link only the FeedApp MCP server.
+- `[x]` Add FeedApp documentation for chat-management application/MCP registration.
+- `[x]` Add bot reply generation service that calls chat-management and stores draft-only approval requests.
+- `[x]` Add case-detail UI action for generating a bot reply draft.
+- `[x]` Add dashboard floating chat UI connected through FeedApp `/api/agent/chat`.
+- `[x]` Add explicit FeedApp confirmation cards for bot-proposed status transitions and assignments.
+- `[x]` Add confirmed-action endpoint that executes bot-proposed transitions and assignments through FeedApp services.
+- `[~]` Add audit events for bot request, knowledge search, draft creation, and later approval/rejection.
+- `[x]` Add observability for bot run ID, case ID, product source, tool calls, draft ID, and failure reason.
+- `[x]` Roll out behind `FEEDBACK_AGENT_ENABLED`.
 
 Acceptance criteria:
 

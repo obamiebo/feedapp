@@ -5,6 +5,7 @@ import type { Route } from "next";
 import type { ReactNode } from "react";
 import { logoutAction } from "@/app/actions/auth";
 import type { AppUser } from "@/domain/types";
+import { AgentChatWidget } from "@/components/agent-chat-widget";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/cn";
 import { getEntryContext, type EntryMode } from "@/lib/session-cookie";
@@ -74,7 +75,13 @@ function NavLinks({
           className={cn(
             "inline-flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
             orientation === "vertical" ? "px-3 py-2.5" : "flex-col gap-1 px-3 py-2 text-xs",
-            key === active ? "bg-brand text-white shadow-sm" : "text-muted hover:bg-panel-muted hover:text-ink"
+            orientation === "vertical" && key === active
+              ? "bg-white text-brand-deep shadow-sm"
+              : orientation === "vertical"
+                ? "text-white/75 hover:bg-white/10 hover:text-white"
+                : key === active
+                  ? "bg-brand text-white shadow-sm"
+                  : "text-muted hover:bg-panel-muted hover:text-ink"
           )}
         >
           <Icon size={18} aria-hidden="true" />
@@ -163,18 +170,20 @@ function EmbeddedShell({
 
   return (
     <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-20 border-b border-line bg-panel/95 px-4 py-3 shadow-sm backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-line bg-panel/95 px-4 py-3 shadow-md backdrop-blur">
         <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <Image
-              src="/feedapp-icon.png"
-              alt=""
-              width={28}
-              height={28}
-              priority
-              aria-hidden="true"
-              className="h-7 w-7"
-            />
+            <span className="inline-flex size-10 items-center justify-center rounded-md border border-line bg-panel-subtle shadow-sm">
+              <Image
+                src="/feedapp-icon.png"
+                alt=""
+                width={28}
+                height={28}
+                priority
+                aria-hidden="true"
+                className="h-7 w-7"
+              />
+            </span>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-ink">Feedback operations</div>
               <div className="truncate text-xs text-muted">{sourceLabel}</div>
@@ -199,6 +208,7 @@ function EmbeddedShell({
         </div>
       </header>
       <main className="mx-auto min-w-0 max-w-[1440px] p-4 sm:p-5 lg:p-6">{children}</main>
+      {currentUser && process.env.FEEDBACK_AGENT_ENABLED === "true" ? <AgentChatWidget compact /> : null}
     </div>
   );
 }
@@ -229,20 +239,25 @@ export async function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-bg lg:grid lg:grid-cols-[260px_1fr]">
-      <aside className="sticky top-0 hidden h-screen flex-col gap-6 border-r border-line bg-panel p-4 lg:flex">
-        <div className="flex flex-col gap-2.5 rounded-lg border border-line bg-panel-subtle p-3">
+    <div className="min-h-screen bg-bg lg:grid lg:grid-cols-[272px_1fr]">
+      <aside className="sticky top-0 hidden h-screen flex-col gap-6 bg-brand-deep p-4 shadow-[18px_0_45px_rgba(13,31,70,0.16)] lg:flex">
+        <div className="flex flex-col gap-3 rounded-lg border border-white/15 bg-white p-3 shadow-md">
           <div className="flex items-center gap-2">
-            <Image
-              src="/feedapp-icon.png"
-              alt=""
-              width={30}
-              height={30}
-              priority
-              aria-hidden="true"
-              className="h-[30px] w-[30px]"
-            />
-            <span className="text-base font-semibold text-ink">FeedApp</span>
+            <span className="inline-flex size-10 items-center justify-center rounded-md border border-line bg-panel-subtle">
+              <Image
+                src="/feedapp-icon.png"
+                alt=""
+                width={30}
+                height={30}
+                priority
+                aria-hidden="true"
+                className="h-[30px] w-[30px]"
+              />
+            </span>
+            <div className="min-w-0">
+              <span className="block text-base font-semibold text-ink">FeedApp</span>
+              <span className="block truncate text-xs text-muted">Feedback operations</span>
+            </div>
           </div>
           <div className="flex items-center gap-1.5 border-t border-line pt-2.5">
             <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Powered by</span>
@@ -250,16 +265,18 @@ export async function AppShell({
           </div>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1" aria-label="Primary navigation">
+        <nav className="flex flex-1 flex-col gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] p-2" aria-label="Primary navigation">
           <NavLinks active={active} orientation="vertical" currentUser={currentUser} />
         </nav>
 
         {currentUser ? (
-          <div className="flex flex-col gap-3 border-t border-line pt-4">
-            <UserMenu currentUser={currentUser} showSignOut={false} />
+          <div className="flex flex-col gap-3 border-t border-white/15 pt-4">
+            <div className="rounded-lg border border-white/15 bg-white p-1 shadow-md">
+              <UserMenu currentUser={currentUser} showSignOut={false} />
+            </div>
             <form action={logoutAction}>
               <button
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-panel-muted hover:text-critical"
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/75 transition-colors hover:bg-white/10 hover:text-white"
                 type="submit"
               >
                 <LogOut size={16} aria-hidden="true" />
@@ -270,9 +287,11 @@ export async function AppShell({
         ) : null}
       </aside>
 
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-4 py-2 lg:hidden">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel/95 px-4 py-2 shadow-sm backdrop-blur lg:hidden">
         <div className="flex items-center gap-2">
-          <Image src="/feedapp-icon.png" alt="" width={26} height={26} aria-hidden="true" className="h-[26px] w-[26px]" />
+          <span className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-panel-subtle">
+            <Image src="/feedapp-icon.png" alt="" width={26} height={26} aria-hidden="true" className="h-[26px] w-[26px]" />
+          </span>
           <span className="text-sm font-semibold text-ink">FeedApp</span>
         </div>
         <nav className="flex gap-1" aria-label="Primary navigation">
@@ -281,6 +300,7 @@ export async function AppShell({
       </div>
 
       <main className="min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
+      {currentUser && process.env.FEEDBACK_AGENT_ENABLED === "true" ? <AgentChatWidget /> : null}
     </div>
   );
 }

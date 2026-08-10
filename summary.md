@@ -22,6 +22,200 @@ The current implementation is a database-backed Next.js/React internal operation
 
 ## Latest Session
 
+Date: 2026-08-10
+
+### 2026-08-10 - Product-Scoped Case Tags
+
+Summary:
+
+- Added product-scoped `CaseTag` and `CaseTagAssignment` schema models and migration.
+- Added case tag repository and service with product-scope permission checks.
+- Added tag management under `Settings > Products` for Admins and directly assigned Product Managers, with centered add-tag modal that selects product, name, description, and color.
+- Added case detail tag assignment/removal for users who can access the case.
+- Moved case detail tags into the Case Summary grid in place of the redundant Product field, and removed the separate Case Tags panel.
+- Updated Products settings copy so Product Managers can clearly find product tag management.
+- Fixed Product Manager settings visibility so Products appears for any Product Manager with scoped product access, while roster controls remain limited to direct roster managers/admins.
+- Refined Product tags table editing so rows are read-only by default, use icon-only edit/save controls, skip unchanged server submissions, and show `No description` for empty descriptions.
+- Added dashboard tag filtering and tag badges on case list rows.
+- Added tags to product report list responses.
+- Added product-authenticated APIs for listing/creating tags and assigning/removing tags on source-owned cases.
+
+Files changed:
+
+- `README.md`
+- `plan.md`
+- `summary.md`
+- `prisma/schema.prisma`
+- `prisma/migrations/20260810112000_product_case_tags/migration.sql`
+- `src/app/api/ingestion/tags/route.ts`
+- `src/app/api/ingestion/reports/[caseId]/tags/route.ts`
+- `src/app/cases/[caseId]/page.tsx`
+- `src/app/page.tsx`
+- `src/app/settings/products/page.tsx`
+- `src/components/product-tag-dialog.tsx`
+- `src/repositories/case-tags.ts`
+- `src/repositories/cases.ts`
+- `src/services/case-tags.ts`
+- `tests/case-tags-service.test.ts`
+- `tests/case-repository.test.ts`
+
+Verification:
+
+- `npx prisma generate`: passed.
+- `npx prisma validate`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm test`: passed, 183 tests.
+- `npm run build:verify`: passed.
+
+### 2026-08-10 - Case Conversation History
+
+Summary:
+
+- Reused the existing case `Message` table as the case conversation stream.
+- Added inbound customer feedback message creation when new cases are created.
+- Added a data migration to backfill existing cases with an initial inbound conversation message from the case description.
+- Added a collapsible `Conversation` section in case detail between `Customer details` and `Activity timeline`.
+- Converted the case detail activity timeline into a collapsible section and kept customer-facing messages out of the operational timeline.
+
+Files changed:
+
+- `summary.md`
+- `prisma/migrations/20260810134000_backfill_case_conversation_messages/migration.sql`
+- `src/app/cases/[caseId]/page.tsx`
+- `src/repositories/messages.ts`
+- `src/services/case-timeline.ts`
+- `src/services/cases.ts`
+- `tests/case-service.test.ts`
+
+Verification:
+
+- `npm run typecheck`: passed.
+- `npx vitest run tests/case-service.test.ts tests/case-timeline.test.ts tests/case-repository.test.ts`: passed, 43 tests.
+- `npm run lint`: passed.
+- `npm test`: passed, 185 tests.
+- `npx prisma validate`: passed.
+- `npm run build:verify`: passed.
+- `npx prisma migrate deploy`: passed after allowing local DB access.
+- Local DB sanity check: `{"inboundMessages":7}`.
+
+### 2026-08-10 - Product Inbound Reply API
+
+Summary:
+
+- Added product-authenticated `POST /api/ingestion/reports/[caseId]/messages` for app/product systems to append customer replies to a case conversation.
+- The endpoint accepts `Email` or `SMS` replies, body, optional external message ID, and optional customer metadata.
+- The case can be resolved by FeedApp case ID or by the product's submitted case ID, scoped to the authenticated product source.
+- Inbound replies are stored as inbound customer messages and audited as `case.customer_reply_received`.
+- Replies to `Resolved` or `Closed` cases automatically transition the case to `Reopened`, create a status-change audit event, create a new case stage, and send the product callback when configured.
+- Documented the endpoint in `README.md`.
+
+Files changed:
+
+- `README.md`
+- `summary.md`
+- `src/app/api/ingestion/reports/[caseId]/messages/route.ts`
+- `src/lib/validation.ts`
+- `src/repositories/messages.ts`
+- `src/services/cases.ts`
+- `tests/api-ingestion-report-messages-route.test.ts`
+- `tests/case-service.test.ts`
+
+Verification:
+
+- `npm run typecheck`: passed.
+- `npx vitest run tests/case-service.test.ts tests/api-ingestion-report-messages-route.test.ts`: passed, 40 tests.
+- `npm run lint`: passed.
+- `npm test`: passed, 191 tests.
+- `npm run build:verify`: passed.
+
+### 2026-08-10 - Assistant Action Confirmation Cards
+
+Summary:
+
+- Added a shared FeedApp agent action contract for proposed case transitions and assignments.
+- Updated `/api/agent/chat` to extract `proposedActions` from chat-management metadata/content/message JSON and return them to the widget.
+- Added `/api/agent/actions` for confirming or dismissing proposed assistant actions.
+- Confirmed status transitions execute through `transitionCaseForUser`; confirmed assignments execute through `assignCaseForUser`.
+- Added audit events for dismissed, confirmed, and failed proposed actions.
+- Added confirmation cards to the floating assistant with `Confirm` and `Dismiss` controls.
+- Added `list_assignable_users_for_case` MCP tool so chat-management can propose assignments with exact user IDs.
+
+Files changed:
+
+- `README.md`
+- `plan.md`
+- `summary.md`
+- `src/app/api/agent/actions/route.ts`
+- `src/app/api/agent/chat/route.ts`
+- `src/components/agent-chat-widget.tsx`
+- `src/lib/agent-actions.ts`
+- `src/services/mcp-tools.ts`
+- `tests/api-agent-actions-route.test.ts`
+- `tests/api-agent-chat-route.test.ts`
+- `tests/mcp-tools.test.ts`
+
+Verification:
+
+- `npx vitest run tests/api-agent-actions-route.test.ts tests/api-agent-chat-route.test.ts tests/mcp-tools.test.ts tests/api-mcp-route.test.ts`: passed, 18 tests.
+- `npm run typecheck`: passed.
+
+### 2026-08-10 - Connected Dashboard Assistant
+
+Summary:
+
+- Added FeedApp-owned `/api/agent/chat` as the stable dashboard chat endpoint.
+- Added a floating FeedApp assistant widget mounted through `AppShell` when `FEEDBACK_AGENT_ENABLED=true`.
+- Forwarded dashboard chat to registered chat-management using the current FeedApp session token and `CHAT_MANAGEMENT_APP_KEY`.
+- Wrapped chat requests with FeedApp operational instructions so chat-management uses FeedApp MCP tools and does not execute sensitive actions without a FeedApp confirmation flow.
+- Added MCP tools for permission-scoped feedback counts, filtered case lists, and next-action recommendations.
+- Kept direct status transitions and assignment execution out of MCP pending explicit UI confirmation cards.
+
+Files changed:
+
+- `README.md`
+- `plan.md`
+- `summary.md`
+- `src/app/api/agent/chat/route.ts`
+- `src/components/agent-chat-widget.tsx`
+- `src/components/app-shell.tsx`
+- `src/services/mcp-tools.ts`
+- `tests/api-agent-chat-route.test.ts`
+- `tests/mcp-tools.test.ts`
+
+Verification:
+
+- `npx vitest run tests/api-agent-chat-route.test.ts tests/mcp-tools.test.ts tests/api-mcp-route.test.ts`: passed, 13 tests.
+- `npm run typecheck`: passed.
+
+### 2026-08-10 - Agentic Bot Draft Workflow
+
+Summary:
+
+- Added a FeedApp chat-management client for the application-scoped `/chat-v2/legacy` endpoint using `X-App-Key` and the current FeedApp session bearer token.
+- Added the FeedApp agent bot service behind `FEEDBACK_AGENT_ENABLED`.
+- Added draft-only bot reply generation that calls chat-management, reuses a tool-created approval ID when returned, or stores the returned text through the existing customer reply approval flow.
+- Added case-detail `Generate draft` UI for eligible users when the feature flag is enabled and a product-manager approval route exists.
+- Added audit/observability events for bot request, draft creation, failure, MCP product-knowledge search, MCP draft creation, and MCP internal-note additions.
+- Documented chat-management application registration and FeedApp MCP server linking.
+
+Files changed:
+
+- `README.md`
+- `plan.md`
+- `summary.md`
+- `src/app/cases/[caseId]/page.tsx`
+- `src/lib/chat-management.ts`
+- `src/services/agent-bot.ts`
+- `src/services/mcp-tools.ts`
+- `tests/agent-bot-service.test.ts`
+- `tests/mcp-tools.test.ts`
+
+Verification:
+
+- `npx vitest run tests/agent-bot-service.test.ts tests/mcp-tools.test.ts tests/api-mcp-route.test.ts`: passed, 11 tests.
+- `npm run typecheck`: passed.
+
 Date: 2026-08-06
 
 ### 2026-08-06 - Agentic Feedback Bot Foundations
@@ -45,6 +239,7 @@ Summary:
 - Updated the ERID agent admin frontend MCP server forms so `api_key` auth exposes an API key field and sends `auth_config.api_key` to chat-management.
 - Fixed the ERID application API-key copy button so it falls back when `navigator.clipboard` is unavailable or blocked.
 - Fixed ERID auth-service user creation so `email_sent` reflects the actual SMTP send result instead of only echoing the request flag.
+- Added ERID auth-service `EMAIL_PROVIDER=itc` support so user-creation emails can be delivered through the same ITC messaging HTTP provider used by FeedApp, without SMTP username/password credentials.
 - Updated `plan.md` with Phase 14 for the agentic feedback bot and marked the completed foundation tasks.
 
 Files changed:
@@ -82,6 +277,10 @@ Files changed:
 - `../itc-agent-framework/itc-agent-frontend/src/app/admin/applications/components/app-mcp-servers.tsx`
 - `../itc-agent-framework/itc-agent-frontend/src/app/admin/applications/components/api-key-banner.tsx`
 - `../itc-agent-framework/itc-agent-frontend/src/app/admin/users/create-user-modal.tsx`
+- `../itc-agent-framework/.env.example`
+- `../itc-agent-framework/erid-auth-service/.env.example`
+- `../itc-agent-framework/erid-auth-service/app/core/config.py`
+- `../itc-agent-framework/erid-auth-service/app/services/email_service.py`
 - `../itc-agent-framework/erid-auth-service/app/services/admin_service.py`
 - `../itc-agent-framework/erid-auth-service/app/routers/admin.py`
 
@@ -94,6 +293,7 @@ Verification:
 - `npx prisma validate`: passed.
 - `npm run typecheck`: passed.
 - `python3 -B -m py_compile ...` for changed document-service Python files: passed.
+- `python3 -B -m py_compile app/core/config.py app/services/email_service.py app/services/admin_service.py app/routers/admin.py` for changed ERID auth-service Python files: passed.
 - Document-service pytest was not run locally because the active Python environment is missing project dependencies such as `pytest` and `jwt`.
 
 Date: 2026-08-05

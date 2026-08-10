@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { CaseStatus, Priority } from "@/domain/types";
 import type { AppUser } from "@/domain/types";
 import { prisma } from "@/lib/db";
-import { canManageProductRoster } from "@/lib/access-control";
+import { canManageProductRoster, canManageProductTags } from "@/lib/access-control";
 import { hashIntegrationSecret } from "@/lib/integrations";
 import { normalizeKey } from "@/lib/keys";
 import { getProductCallbackConfig, getProductExternalEntryConfig } from "@/repositories/integrations";
@@ -57,6 +57,7 @@ export type AdminProductSource = {
 
 export type ProductRosterSource = AdminProductSource & {
   canManageRoster: boolean;
+  canManageTags: boolean;
 };
 
 export type ProductRosterMember = {
@@ -591,11 +592,14 @@ export function createAdminService(client: PrismaClient = prisma): AdminService 
     async getProductRosterDirectory(actor, sourceId) {
       const productSources = (await fetchProductSources(client)).map((source) => ({
         ...source,
-        canManageRoster: canManageProductRoster(actor, source.key)
+        canManageRoster: canManageProductRoster(actor, source.key),
+        canManageTags: canManageProductTags(actor, source.key)
       }));
-      const manageableSources = productSources.filter((source) => source.canManageRoster);
+      const manageableSources = productSources.filter((source) => source.canManageRoster || source.canManageTags);
       const selectedSource =
-        productSources.find((source) => (source.id === sourceId || source.key === sourceId) && source.canManageRoster) ??
+        productSources.find(
+          (source) => (source.id === sourceId || source.key === sourceId) && (source.canManageRoster || source.canManageTags)
+        ) ??
         manageableSources[0] ??
         null;
 

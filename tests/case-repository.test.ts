@@ -193,6 +193,7 @@ describe("case repository", () => {
           customerName: "Afi Mensah",
           customerEmail: "afi@example.com",
           customerPhone: null,
+          tags: [],
           createdAt: new Date("2026-07-30T08:00:00.000Z"),
           updatedAt: new Date("2026-07-30T09:00:00.000Z")
         }

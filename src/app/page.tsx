@@ -18,6 +18,7 @@ import { isSlaAtRisk, isSlaBreached } from "@/lib/sla";
 import type { CaseListFilters, CaseListItem, CaseSlaState } from "@/repositories/cases";
 import { createPrismaIntegrationRepository } from "@/repositories/integrations";
 import { createPrismaUserRepository } from "@/repositories/users";
+import { createCaseTagService } from "@/services/case-tags";
 import { createCaseService } from "@/services/cases";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ function parseFilters(searchParams: DashboardSearchParams): CaseListFilters {
   const productGroupId = firstParam(searchParams, "productGroupId");
   const assigneeId = firstParam(searchParams, "assigneeId");
   const sourceSystem = firstParam(searchParams, "sourceSystem");
+  const tagId = firstParam(searchParams, "tagId");
   const slaState = firstParam(searchParams, "slaState");
   const search = firstParam(searchParams, "search");
 
@@ -46,6 +48,7 @@ function parseFilters(searchParams: DashboardSearchParams): CaseListFilters {
     productGroupId: productGroupId || undefined,
     assigneeId: assigneeId || undefined,
     sourceSystem: sourceSystem || undefined,
+    tagId: tagId || undefined,
     slaState: ["on-track", "at-risk", "breached"].includes(slaState ?? "")
       ? (slaState as CaseSlaState)
       : undefined,
@@ -171,11 +174,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ...filters,
     sourceSystems: selectedGroupSourceKeys && selectedGroupSourceKeys.length > 0 ? selectedGroupSourceKeys : undefined
   };
-  const [casePage, stalePrompts, pendingApprovals, stats] = await Promise.all([
+  const tagSourceKey = filters.sourceSystem || currentUser.productSourceKeys[0];
+  const [casePage, stalePrompts, pendingApprovals, stats, caseTags] = await Promise.all([
     caseService.listCasesPageForUser(currentUser, { ...queryFilters, page, pageSize: 10 }),
     caseService.listStaleCustomerUpdatePromptsForUser(currentUser),
     caseService.listPendingCustomerReplyApprovalsForUser(currentUser, 8),
-    caseService.getCaseStatsForUser(currentUser, queryFilters)
+    caseService.getCaseStatsForUser(currentUser, queryFilters),
+    tagSourceKey ? createCaseTagService().listTagsForSourceForUser(tagSourceKey, currentUser).catch(() => []) : Promise.resolve([])
   ]);
   const cases = casePage?.items ?? [];
   const sortedPendingApprovals = [...pendingApprovals].sort((a, b) => {
@@ -298,6 +303,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <option value="breached">Breached</option>
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-sm text-muted">
+          Tag
+          <select
+            name="tagId"
+            defaultValue={filters.tagId ?? ""}
+            className="rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+          >
+            <option value="">All tags</option>
+            {caseTags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="flex items-end gap-2">
           <Link
             className="inline-flex items-center rounded-md border border-line bg-panel px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-panel-muted"
@@ -398,6 +418,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                             <div className="text-xs text-muted">
                               {item.id} · {item.customerName ?? "Unknown customer"}
                             </div>
+                            {(item.tags ?? []).length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {(item.tags ?? []).map((tag) => (
+                                  <span
+                                    key={tag.id}
+                                    className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                                    style={{ backgroundColor: tag.color }}
+                                  >
+                                    {tag.name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       )
