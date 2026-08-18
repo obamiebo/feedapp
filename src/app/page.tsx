@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell, CheckCircle2, ChevronLeft, ChevronRight, Inbox, MessageSquare } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Inbox, MessageSquare, SlidersHorizontal } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -198,12 +198,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     .filter((status) => status !== "Closed")
     .reduce((sum, status) => sum + stats.byStatus[status], 0);
   const filterSection = (
-    <section className="rounded-lg border border-line bg-panel p-5 shadow-sm" aria-label="Case filters">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ink">Filters</h2>
-        <span className="text-xs text-muted">{filterCount} active</span>
-      </div>
-      <form className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" action="/" method="get">
+    <details className="group rounded-lg border border-line bg-panel shadow-sm" open={filterCount > 0}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2">
+          <SlidersHorizontal size={16} className="text-muted" aria-hidden="true" />
+          Filters
+          <span className="rounded-full bg-neutral-bg px-2 py-0.5 text-xs font-medium text-muted">{filterCount} active</span>
+        </span>
+        <ChevronDown size={16} className="shrink-0 text-muted transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <form className="grid grid-cols-1 gap-3 border-t border-line p-5 sm:grid-cols-2 lg:grid-cols-4" action="/" method="get" aria-label="Case filters">
         {embedMode ? <input name="entryMode" type="hidden" value="embed" /> : null}
         <label className="flex flex-col gap-1 text-sm text-muted">
           Search
@@ -333,7 +337,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </button>
         </div>
       </form>
-    </section>
+    </details>
   );
 
   return (

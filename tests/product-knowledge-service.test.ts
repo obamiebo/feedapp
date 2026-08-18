@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AppUser } from "@/domain/types";
+import { DocumentServiceRequestError } from "@/lib/document-service";
 import type { IntegrationRepository } from "@/repositories/integrations";
 import type { ProductKnowledgeRepository } from "@/repositories/product-knowledge";
 import { createProductKnowledgeService } from "@/services/product-knowledge";
@@ -122,6 +123,54 @@ describe("product knowledge service", () => {
         sourceId: "source-1",
         documentServiceId: "doc-service-1",
         uploadedById: "user-1"
+      })
+    );
+  });
+
+  it("reuses the existing document-service ID when replacing text knowledge", async () => {
+    const uploadTextProductKnowledge = vi.fn().mockResolvedValue({
+      task_id: "task-reindex-1",
+      document_id: "doc-service-1",
+      title: "Checkout FAQ",
+      file_size: 120,
+      mime_type: "text/plain",
+      processing_status: "pending",
+      message: "queued"
+    });
+    const createDocument = vi.fn(makeProductKnowledgeRepository().createDocument);
+    const service = createProductKnowledgeService({
+      integrations: makeIntegrationRepository(),
+      documentService: {
+        uploadTextProductKnowledge,
+        uploadFileProductKnowledge: vi.fn(),
+        searchProductKnowledge: vi.fn(),
+        getProcessingStatus: vi.fn(),
+        deleteDocument: vi.fn()
+      },
+      productKnowledge: makeProductKnowledgeRepository({ createDocument })
+    });
+
+    await service.uploadTextForUser(
+      {
+        productSourceKey: "commerce-platform",
+        title: "Checkout FAQ",
+        text: "Updated checkout troubleshooting steps",
+        documentType: "faq",
+        documentId: "doc-service-1"
+      },
+      makeUser({ roles: ["Product Manager"] })
+    );
+
+    expect(uploadTextProductKnowledge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: "doc-service-1",
+        productSourceKey: "commerce-platform"
+      })
+    );
+    expect(createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentServiceId: "doc-service-1",
+        processingTaskId: "task-reindex-1"
       })
     );
   });
@@ -318,5 +367,50 @@ describe("product knowledge service", () => {
         processingStatus: "completed"
       })
     );
+  });
+
+  it("marks local knowledge deleted when the remote document is already gone", async () => {
+    const deleteDocument = vi.fn().mockRejectedValue(new DocumentServiceRequestError("Document service request failed: Not found", 404));
+    const markDeleted = vi.fn().mockResolvedValue({
+      id: "knowledge-1",
+      sourceId: "source-1",
+      sourceKey: "commerce-platform",
+      documentServiceId: "doc-service-1",
+      title: "Checkout FAQ",
+      documentType: "faq",
+      processingStatus: "deleted",
+      processingTaskId: "task-1",
+      processingError: null,
+      uploadedById: "user-1",
+      createdAt: new Date("2026-08-06T12:00:00.000Z"),
+      updatedAt: new Date("2026-08-06T12:00:00.000Z")
+    });
+    const service = createProductKnowledgeService({
+      integrations: makeIntegrationRepository(),
+      documentService: {
+        uploadTextProductKnowledge: vi.fn(),
+        uploadFileProductKnowledge: vi.fn(),
+        searchProductKnowledge: vi.fn(),
+        getProcessingStatus: vi.fn(),
+        deleteDocument
+      },
+      productKnowledge: makeProductKnowledgeRepository({ markDeleted })
+    });
+
+    await expect(
+      service.deleteForUser(
+        {
+          productSourceKey: "commerce-platform",
+          documentServiceId: "doc-service-1"
+        },
+        makeUser({ roles: ["Product Manager"] })
+      )
+    ).resolves.toMatchObject({
+      documentServiceId: "doc-service-1",
+      processingStatus: "deleted"
+    });
+
+    expect(deleteDocument).toHaveBeenCalledWith("doc-service-1");
+    expect(markDeleted).toHaveBeenCalledWith("doc-service-1");
   });
 });

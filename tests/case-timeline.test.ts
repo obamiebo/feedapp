@@ -226,11 +226,11 @@ describe("case timeline", () => {
 
     expect(timeline).toEqual([
       expect.objectContaining({
-        title: "Recommendation message submitted for approval",
+        title: "ITC Product Recommendation submitted for approval",
         detail: "Advanced Analytics Add-on recommendation sent for review"
       }),
       expect.objectContaining({
-        title: "Recommendation dismissed",
+        title: "ITC Product Recommendation dismissed",
         detail: "Advanced Analytics Add-on dismissed"
       }),
       expect.objectContaining({

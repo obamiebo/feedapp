@@ -63,7 +63,7 @@ function approvalKind(approvalId: string, auditLogs: Array<{ action: string; met
   });
 
   return fromRecommendation
-    ? { label: "Recommendation reply", tone: "warning" as const }
+    ? { label: "ITC Product Recommendation", tone: "warning" as const }
     : { label: "Customer reply", tone: "neutral" as const };
 }
 
@@ -514,11 +514,12 @@ export default async function CaseDetailPage({
 
   const caseDetail = caseAccess.caseDetail;
   const assignedTags = caseDetail.tags ?? [];
+  const canShowProductRecommendations = caseDetail.status === "Resolved" || caseDetail.status === "Closed";
 
   const recommendationService = createCustomerRecommendationService();
   const [users, recommendations, productTags] = await Promise.all([
     createPrismaUserRepository().listAssignableUsersByProductSourceKey(caseDetail.sourceSystem),
-    recommendationService.listForCase(caseDetail, currentUser),
+    canShowProductRecommendations ? recommendationService.listForCase(caseDetail, currentUser) : Promise.resolve([]),
     createCaseTagService().listTagsForSourceForUser(caseDetail.sourceSystem, currentUser).catch(() => [])
   ]);
 
@@ -553,7 +554,9 @@ export default async function CaseDetailPage({
     ? suggestCustomerReply(caseDetail, { staleFollowUp: customerReplySuggestion.staleFollowUp })
     : "";
   const handledRecommendationIds = handledRecommendationIdsFromAuditLogs(caseDetail.auditLogs);
-  const visibleRecommendations = recommendations.filter((recommendation) => !handledRecommendationIds.has(recommendation.id));
+  const visibleRecommendations = canShowProductRecommendations
+    ? recommendations.filter((recommendation) => !handledRecommendationIds.has(recommendation.id))
+    : [];
 
   const inputClass =
     "rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none";
@@ -741,7 +744,7 @@ export default async function CaseDetailPage({
             <section className={cardClass}>
               <div className={cardHeaderClass}>
                 <Sparkles size={18} className="text-accent" aria-hidden="true" />
-                <h2 className="text-sm font-semibold text-ink">Customer recommendations</h2>
+                <h2 className="text-sm font-semibold text-ink">ITC Product Recommendation</h2>
                 <span className="ml-auto text-xs text-muted">Internal only</span>
               </div>
               <div className="flex flex-col divide-y divide-line">
@@ -1091,12 +1094,14 @@ export default async function CaseDetailPage({
                   {visibleTimeline.map((item) => (
                     <div key={item.id} className={`${nestedCardClass} min-w-0`}>
                       <div className="flex min-w-0 flex-col gap-1">
-                        <strong className="break-words text-sm text-ink [overflow-wrap:anywhere]">{item.title}</strong>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <strong className="break-words text-sm text-ink [overflow-wrap:anywhere]">{item.title}</strong>
+                          <StatusBadge label={item.actor} tone="neutral" />
+                        </div>
                         <span className="text-xs text-muted">{formatDate(item.createdAt)}</span>
                       </div>
                       <p className="mt-2 break-words text-sm text-muted [overflow-wrap:anywhere]">{item.detail || item.actor}</p>
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="break-words text-xs text-muted [overflow-wrap:anywhere]">{item.actor}</span>
                         <StatusBadge label={item.kind} tone={item.tone} />
                       </div>
                     </div>
@@ -1107,12 +1112,14 @@ export default async function CaseDetailPage({
                         {olderTimeline.map((item) => (
                           <div key={item.id} className={`${nestedCardClass} min-w-0`}>
                             <div className="flex min-w-0 flex-col gap-1">
-                              <strong className="break-words text-sm text-ink [overflow-wrap:anywhere]">{item.title}</strong>
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <strong className="break-words text-sm text-ink [overflow-wrap:anywhere]">{item.title}</strong>
+                                <StatusBadge label={item.actor} tone="neutral" />
+                              </div>
                               <span className="text-xs text-muted">{formatDate(item.createdAt)}</span>
                             </div>
                             <p className="mt-2 break-words text-sm text-muted [overflow-wrap:anywhere]">{item.detail || item.actor}</p>
                             <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                              <span className="break-words text-xs text-muted [overflow-wrap:anywhere]">{item.actor}</span>
                               <StatusBadge label={item.kind} tone={item.tone} />
                             </div>
                           </div>

@@ -45,6 +45,7 @@ type ProductKnowledgeModel = {
   create(args: unknown): Promise<PrismaProductKnowledgeRecord>;
   findMany(args: unknown): Promise<PrismaProductKnowledgeRecord[]>;
   update(args: unknown): Promise<PrismaProductKnowledgeRecord>;
+  upsert(args: unknown): Promise<PrismaProductKnowledgeRecord>;
 };
 
 type ProductKnowledgeClient = {
@@ -124,10 +125,21 @@ export function createPrismaProductKnowledgeRepository(
 ): ProductKnowledgeRepository {
   return {
     async createDocument(input) {
-      const record = await client.productKnowledgeDocument.create({
-        data: {
+      const data = {
+        sourceId: input.sourceId,
+        documentServiceId: input.documentServiceId,
+        title: input.title,
+        documentType: documentTypeToPrisma[input.documentType],
+        processingStatus: statusToPrisma[input.processingStatus ?? "pending"],
+        processingTaskId: input.processingTaskId ?? null,
+        processingError: input.processingError ?? null,
+        uploadedById: input.uploadedById ?? null
+      };
+      const record = await client.productKnowledgeDocument.upsert({
+        where: { documentServiceId: input.documentServiceId },
+        create: data,
+        update: {
           sourceId: input.sourceId,
-          documentServiceId: input.documentServiceId,
           title: input.title,
           documentType: documentTypeToPrisma[input.documentType],
           processingStatus: statusToPrisma[input.processingStatus ?? "pending"],

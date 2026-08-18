@@ -71,7 +71,7 @@ Do not split staff-facing case workflows, settings workflows, login/change-passw
 | 10 | Observability, Audit, and Operations | `[~]` In progress |
 | 11 | Security Hardening and Compliance Readiness | `[ ]` Not started |
 | 12 | AWS Production Deployment | `[ ]` Not started |
-| 13 | MCP and AI Tooling Layer | `[ ]` Not started |
+| 13 | MCP and AI Tooling Layer | `[~]` In progress |
 
 ## Phase 0: Discovery, Product Definition, and Architecture
 
@@ -501,23 +501,23 @@ Goal: add controlled AI/tool access after the core workflow and APIs are stable.
 
 Tasks:
 
-- `[ ]` Define permission-aware MCP tool boundaries.
-- `[ ]` Add MCP server that calls application services, not the database directly.
-- `[ ]` Add case lookup tool.
-- `[ ]` Add case summary tool.
+- `[x]` Define permission-aware MCP tool boundaries.
+- `[x]` Add MCP server that calls application services, not the database directly.
+- `[x]` Add case lookup tool.
+- `[x]` Add case summary tool.
 - `[ ]` Add SLA risk check tool.
-- `[ ]` Add reply draft tool.
+- `[x]` Add reply draft tool.
 - `[ ]` Add customer recommendation lookup tool.
 - `[ ]` Revisit handoff summary tooling after product-scoped assignment is stable.
 - `[ ]` Add escalation summary tool.
-- `[ ]` Add audit logging for MCP tool usage.
-- `[ ]` Add tests for MCP permission enforcement and tool outputs.
+- `[~]` Add audit logging for MCP tool usage.
+- `[x]` Add tests for MCP permission enforcement and tool outputs.
 
 Acceptance criteria:
 
-- `[ ]` MCP tools respect the same authorization model as the app.
-- `[ ]` MCP tool actions are auditable.
-- `[ ]` AI-generated suggestions never bypass approval controls.
+- `[x]` MCP tools respect the same authorization model as the app.
+- `[~]` MCP tool actions are auditable.
+- `[x]` AI-generated suggestions never bypass approval controls.
 
 ## Phase 14: Agentic Feedback Bot And Product Knowledge
 
@@ -538,31 +538,33 @@ Tasks:
 - `[x]` Add product knowledge file-upload service flow.
 - `[x]` Add product knowledge file-upload UI.
 - `[x]` Refresh product knowledge processing status by stored task ID.
-- `[ ]` Add product knowledge reindex action.
+- `[x]` Add product knowledge reindex action.
 - `[x]` Add FeedApp-owned MCP tool endpoint that calls application services, not the database directly.
 - `[x]` Add MCP tools for case context, product knowledge search, customer reply draft creation, and internal notes.
 - `[x]` Add MCP tools for feedback counts, filtered case lists, and next-action recommendations.
 - `[x]` Add FeedApp `verify_url` endpoint so chat-management can validate FeedApp session bearer tokens.
 - `[x]` Update ERID admin frontend so API-key MCP servers can be configured and application API keys can be copied safely.
 - `[x]` Fix ERID auth-service user creation email reporting and add ITC messaging provider support for invitation emails.
-- `[~]` Register FeedApp as an application in chat-management and link only the FeedApp MCP server.
+- `[x]` Register FeedApp as an application in chat-management and link only the FeedApp MCP server.
 - `[x]` Add FeedApp documentation for chat-management application/MCP registration.
 - `[x]` Add bot reply generation service that calls chat-management and stores draft-only approval requests.
 - `[x]` Add case-detail UI action for generating a bot reply draft.
 - `[x]` Add dashboard floating chat UI connected through FeedApp `/api/agent/chat`.
 - `[x]` Add explicit FeedApp confirmation cards for bot-proposed status transitions and assignments.
 - `[x]` Add confirmed-action endpoint that executes bot-proposed transitions and assignments through FeedApp services.
-- `[~]` Add audit events for bot request, knowledge search, draft creation, and later approval/rejection.
+- `[x]` Add audit events for bot request, knowledge search, draft creation, proposed-action confirmation/dismissal, and approval workflow events.
 - `[x]` Add observability for bot run ID, case ID, product source, tool calls, draft ID, and failure reason.
+- `[x]` Smoke-check deployed chat-management backend reachability and FeedApp app-key routing.
+- `[ ]` Run browser-session end-to-end assistant smoke test with a real FeedApp session token.
 - `[x]` Roll out behind `FEEDBACK_AGENT_ENABLED`.
 
 Acceptance criteria:
 
-- `[ ]` Product knowledge search is always scoped to the product source derived from FeedApp.
-- `[ ]` Product Managers can manage only directly assigned product knowledge, while Admins can manage all product knowledge.
-- `[ ]` Product Users can search only knowledge for granted product sources.
-- `[ ]` The bot creates customer reply drafts only; it does not send messages, transition cases, or assign cases in v1.
-- `[ ]` Bot and MCP actions reuse FeedApp authorization and are auditable.
+- `[x]` Product knowledge search is always scoped to the product source derived from FeedApp.
+- `[x]` Product Managers can manage only directly assigned product knowledge, while Admins can manage all product knowledge.
+- `[x]` Product Users can search only knowledge for granted product sources.
+- `[x]` The bot creates customer reply drafts only; it does not send messages directly, transition cases directly, or assign cases directly in v1.
+- `[x]` Bot and MCP actions reuse FeedApp authorization and are auditable.
 
 ## Testing Strategy
 

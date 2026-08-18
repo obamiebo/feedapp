@@ -116,8 +116,8 @@ function auditTimelineItem(auditLog: CaseDetail["auditLogs"][number]): CaseTimel
       return {
         id: `audit-${auditLog.id}`,
         kind: "audit",
-        title: "Recommendation reviewed",
-        detail: productName ? `${productName} reviewed` : "Customer recommendation reviewed",
+        title: "ITC Product Recommendation reviewed",
+        detail: productName ? `${productName} reviewed` : "ITC product recommendation reviewed",
         actor: auditLog.actorName ?? "System",
         createdAt: auditLog.createdAt,
         tone: "info"
@@ -126,8 +126,8 @@ function auditTimelineItem(auditLog: CaseDetail["auditLogs"][number]): CaseTimel
       return {
         id: `audit-${auditLog.id}`,
         kind: "audit",
-        title: "Recommendation dismissed",
-        detail: productName ? `${productName} dismissed` : "Customer recommendation dismissed",
+        title: "ITC Product Recommendation dismissed",
+        detail: productName ? `${productName} dismissed` : "ITC product recommendation dismissed",
         actor: auditLog.actorName ?? "System",
         createdAt: auditLog.createdAt,
         tone: "neutral"
@@ -136,8 +136,8 @@ function auditTimelineItem(auditLog: CaseDetail["auditLogs"][number]): CaseTimel
       return {
         id: `audit-${auditLog.id}`,
         kind: "audit",
-        title: "Recommendation message sent",
-        detail: productName ? `${productName} recommendation sent to customer` : "Recommendation message sent",
+        title: "ITC Product Recommendation sent",
+        detail: productName ? `${productName} recommendation sent to customer` : "ITC product recommendation sent",
         actor: auditLog.actorName ?? "System",
         createdAt: auditLog.createdAt,
         tone: "ok"
@@ -146,8 +146,8 @@ function auditTimelineItem(auditLog: CaseDetail["auditLogs"][number]): CaseTimel
       return {
         id: `audit-${auditLog.id}`,
         kind: "audit",
-        title: "Recommendation message submitted for approval",
-        detail: productName ? `${productName} recommendation sent for review` : "Recommendation message sent for review",
+        title: "ITC Product Recommendation submitted for approval",
+        detail: productName ? `${productName} recommendation sent for review` : "ITC product recommendation sent for review",
         actor: auditLog.actorName ?? "System",
         createdAt: auditLog.createdAt,
         tone: "warning"

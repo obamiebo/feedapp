@@ -69,6 +69,16 @@ export type DocumentServiceClientOptions = {
   fetchImpl?: typeof fetch;
 };
 
+export class DocumentServiceRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "DocumentServiceRequestError";
+  }
+}
+
 export class DocumentServiceClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
@@ -152,7 +162,7 @@ export class DocumentServiceClient {
 
     if (!response.ok) {
       const message = await readErrorMessage(response);
-      throw new Error(`Document service request failed: ${message}`);
+      throw new DocumentServiceRequestError(`Document service request failed: ${message}`, response.status);
     }
 
     return (await response.json()) as T;

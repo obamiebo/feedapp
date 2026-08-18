@@ -10,9 +10,9 @@ The current implementation is a database-backed Next.js/React internal operation
 
 ## Current Status
 
-- Overall stage: database-backed internal workflow foundation with product-scoped authorization, customer messaging delivery tracking, admin operations foundations, and agentic product-knowledge foundations in progress.
-- Current active phases: Phase 1, Phase 2, Phase 3, Phase 4, Phase 6, Phase 7, Phase 9, Phase 10, and Phase 14.
-- Most important next work: product knowledge settings UI, FeedApp MCP tool layer, bot draft workflow, SLA/escalation automation, or production deployment hardening.
+- Overall stage: database-backed internal workflow foundation with product-scoped authorization, customer messaging delivery tracking, admin operations foundations, and agentic product-knowledge/MCP foundations implemented pending only real-session assistant smoke validation.
+- Current active phases: Phase 1, Phase 2, Phase 3, Phase 4, Phase 6, Phase 7, Phase 9, Phase 10, Phase 13, and Phase 14.
+- Most important next work: run a browser-session assistant smoke test, then move to SLA/escalation automation, product embedded monitoring, or production deployment hardening.
 - Current runtime data source: Postgres for the dashboard, case pages, settings/admin pages, cases API, product intake, message delivery status, product callback attempts, operations view, and product knowledge metadata; analytics recommendations still use stub/provider foundations.
 - Current database setup state: Docker Compose, initial migration, seed script, and seed verification are working against local Postgres.
 - Current authentication state: email/password sessions are implemented with provisioning and temporary-password enforcement; SSO remains deferred.
@@ -21,6 +21,97 @@ The current implementation is a database-backed Next.js/React internal operation
 - Current UI/design state: the staff-facing app (dashboard, settings, case detail, manual intake, login, change-password, operations) runs on a single Tailwind CSS v4 design system with a shared component library; no page still depends on the old hand-rolled `globals.css` component styles.
 
 ## Latest Session
+
+Date: 2026-08-18
+
+### 2026-08-18 - Deployed Chat-Management Smoke Check
+
+Summary:
+
+- Confirmed FeedApp chat-management registration/linking should be treated as complete.
+- Updated `plan.md` so FeedApp application registration and MCP linking are marked done.
+- Smoke-checked the deployed chat-management backend at `http://54.246.247.31:8008`.
+- Confirmed `CHAT_MANAGEMENT_API_URL` in local FeedApp config points at the reachable deployed backend.
+- Verified chat-management `/health` returns healthy and `/` identifies the chat-management service.
+- Verified `/chat-v2/legacy` with the configured FeedApp app key reaches token verification, while an invalid app key is rejected separately.
+- Left only a real browser/session assistant smoke test as the remaining validation item.
+
+Files changed:
+
+- `plan.md`
+- `summary.md`
+
+Verification:
+
+- `npx vitest run tests/api-agent-chat-route.test.ts tests/api-agent-auth-verify-route.test.ts tests/api-mcp-route.test.ts tests/mcp-tools.test.ts tests/agent-bot-service.test.ts tests/api-agent-actions-route.test.ts`: passed, 26 tests.
+- `curl`/network smoke: `http://54.246.247.31:8008/health` returned `200`.
+- `curl`/network smoke: `http://54.246.247.31:8008/` returned chat-management service metadata.
+- `POST http://54.246.247.31:8008/chat-v2/legacy` with configured FeedApp app key and invalid session returned `401 Token verification failed`, confirming app-key routing reached session verification.
+- `POST http://54.246.247.31:8008/chat-v2/legacy` with invalid app key returned `401 Invalid API key`.
+
+### 2026-08-18 - Product Knowledge And Case UX Refinements
+
+Summary:
+
+- Improved Product knowledge row actions so Reindex, Refresh status, and Delete are compact aligned icon controls with accessible labels.
+- Kept refresh as a per-document action because document-service processing status is tracked by each document's task ID.
+- Added typed document-service request errors and made product knowledge delete treat remote 404 as successful local cleanup, so already-missing remote documents can still be removed from FeedApp.
+- Renamed visible recommendation surfaces from customer recommendation wording to `ITC Product Recommendation` while keeping backend audit action keys stable.
+- Gated ITC Product Recommendation display to `Resolved` and `Closed` cases.
+- Added actor badges to the activity timeline so the person or system that performed each action is visible beside the event title.
+- Made the dashboard case filters collapsible; the panel is collapsed by default and opens automatically when filters are active.
+
+Files changed:
+
+- `summary.md`
+- `src/app/page.tsx`
+- `src/app/cases/[caseId]/page.tsx`
+- `src/app/settings/products/page.tsx`
+- `src/components/product-knowledge-dialog.tsx`
+- `src/lib/document-service.ts`
+- `src/services/product-knowledge.ts`
+- `src/services/case-timeline.ts`
+- `tests/case-timeline.test.ts`
+- `tests/document-service-client.test.ts`
+- `tests/product-knowledge-service.test.ts`
+
+Verification:
+
+- `npx vitest run tests/product-knowledge-service.test.ts tests/document-service-client.test.ts tests/case-timeline.test.ts`: passed, 17 tests.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm test`: passed, 193 tests.
+- `npm run build:verify`: passed.
+
+### 2026-08-18 - Phase 14 Status Reconciliation And Product Knowledge Reindex
+
+Summary:
+
+- Reconciled `plan.md` so Phase 13 and Phase 14 reflect the implemented FeedApp MCP endpoint, permission-scoped MCP tools, dashboard assistant, draft-only bot workflow, confirmation cards, and audit coverage.
+- Added product knowledge reindex/replacement UI from `Settings > Products`.
+- Replacement uploads now pass the existing document-service document ID so document-service replaces old chunks while FeedApp preserves the same knowledge metadata identity.
+- Changed product knowledge metadata persistence to upsert by document-service ID, allowing reindex operations to update the existing record instead of colliding with the unique document ID.
+- Added focused tests for product knowledge replacement and repository upsert behavior.
+
+Files changed:
+
+- `plan.md`
+- `summary.md`
+- `src/app/settings/products/page.tsx`
+- `src/components/product-knowledge-dialog.tsx`
+- `src/repositories/product-knowledge.ts`
+- `tests/product-knowledge-repository.test.ts`
+- `tests/product-knowledge-service.test.ts`
+
+Verification:
+
+- `npx vitest run tests/product-knowledge-service.test.ts tests/product-knowledge-repository.test.ts tests/document-service-client.test.ts`: passed, 14 tests.
+- `npm run typecheck`: passed.
+- `npx vitest run tests/mcp-tools.test.ts tests/api-mcp-route.test.ts tests/agent-bot-service.test.ts tests/api-agent-chat-route.test.ts tests/api-agent-actions-route.test.ts tests/product-knowledge-service.test.ts tests/product-knowledge-repository.test.ts`: passed, 32 tests.
+- `npm run lint`: passed.
+- `npm test`: passed, 192 tests.
+- `npm run build:verify`: passed.
+- `npx prisma validate`: passed.
 
 Date: 2026-08-10
 

@@ -360,6 +360,7 @@ async function uploadProductKnowledgeAction(formData: FormData) {
   const text = String(formData.get("text") ?? "").trim();
   const file = formData.get("file");
   const description = String(formData.get("description") ?? "").trim();
+  const documentId = String(formData.get("documentId") ?? "").trim() || undefined;
   const documentType = parseKnowledgeDocumentType(formData.get("documentType"));
   const hasFile = file instanceof File && file.size > 0;
 
@@ -380,6 +381,7 @@ async function uploadProductKnowledgeAction(formData: FormData) {
           file,
           filename: file.name,
           documentType,
+          documentId,
           description
         },
         currentUser
@@ -391,6 +393,7 @@ async function uploadProductKnowledgeAction(formData: FormData) {
           title,
           text,
           documentType,
+          documentId,
           description
         },
         currentUser
@@ -533,6 +536,8 @@ export default async function SettingsProductsPage({
     ) ?? [];
 
   const inputClass = "rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none";
+  const iconButtonClass =
+    "inline-flex size-8 items-center justify-center rounded-md border border-line bg-panel text-ink transition-colors hover:bg-panel-muted disabled:cursor-not-allowed disabled:opacity-50";
   const rosterErrorMessage =
     rosterError === "invalid-email"
       ? "Enter a valid rep email address."
@@ -743,29 +748,42 @@ export default async function SettingsProductsPage({
                   key: "actions",
                   header: "Actions",
                   render: (document) => (
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ProductKnowledgeDialog
+                        action={uploadProductKnowledgeAction}
+                        productSourceKey={selectedRosterSource.key}
+                        documentServiceId={document.documentServiceId}
+                        defaultTitle={document.title}
+                        defaultDocumentType={document.documentType}
+                        mode="replace"
+                        compact
+                      />
                       <form action={refreshProductKnowledgeStatusAction}>
                         <input name="productSourceKey" type="hidden" value={selectedRosterSource.key} />
                         <input name="documentServiceId" type="hidden" value={document.documentServiceId} />
                         <input name="processingTaskId" type="hidden" value={document.processingTaskId ?? ""} />
                         <ConfirmSubmitButton
-                          className="inline-flex items-center gap-1 text-sm font-medium text-ink"
+                          className={iconButtonClass}
                           confirmMessage={`Refresh processing status for ${document.title}?`}
                           disabled={!document.processingTaskId}
-                          pendingChildren="Refreshing..."
+                          pendingChildren={<RefreshCw size={14} className="animate-spin" />}
+                          title="Refresh status"
+                          aria-label="Refresh status"
                         >
-                          <RefreshCw size={14} /> Refresh
+                          <RefreshCw size={14} />
                         </ConfirmSubmitButton>
                       </form>
                       <form action={deleteProductKnowledgeAction}>
                         <input name="productSourceKey" type="hidden" value={selectedRosterSource.key} />
                         <input name="documentServiceId" type="hidden" value={document.documentServiceId} />
                         <ConfirmSubmitButton
-                          className="inline-flex items-center gap-1 text-sm font-medium text-critical"
+                          className={`${iconButtonClass} text-critical`}
                           confirmMessage={`Delete ${document.title} from product knowledge?`}
-                          pendingChildren="Deleting..."
+                          pendingChildren={<Trash2 size={14} />}
+                          title="Delete"
+                          aria-label="Delete"
                         >
-                          <Trash2 size={14} /> Delete
+                          <Trash2 size={14} />
                         </ConfirmSubmitButton>
                       </form>
                     </div>

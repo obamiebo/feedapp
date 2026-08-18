@@ -22,13 +22,14 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
 }
 
 describe("product knowledge repository", () => {
-  it("creates product-scoped document metadata", async () => {
-    const create = vi.fn().mockResolvedValue(makeRecord());
+  it("upserts product-scoped document metadata", async () => {
+    const upsert = vi.fn().mockResolvedValue(makeRecord());
     const repository = createPrismaProductKnowledgeRepository({
       productKnowledgeDocument: {
-        create,
+        create: vi.fn(),
         findMany: vi.fn(),
-        update: vi.fn()
+        update: vi.fn(),
+        upsert
       }
     });
 
@@ -42,11 +43,17 @@ describe("product knowledge repository", () => {
       uploadedById: "user-1"
     });
 
-    expect(create).toHaveBeenCalledWith(
+    expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
+        where: { documentServiceId: "doc-service-1" },
+        create: expect.objectContaining({
           sourceId: "source-1",
           documentServiceId: "doc-service-1",
+          documentType: "FAQ",
+          processingStatus: "PENDING"
+        }),
+        update: expect.objectContaining({
+          sourceId: "source-1",
           documentType: "FAQ",
           processingStatus: "PENDING"
         })
@@ -65,7 +72,8 @@ describe("product knowledge repository", () => {
       productKnowledgeDocument: {
         create: vi.fn(),
         findMany,
-        update: vi.fn()
+        update: vi.fn(),
+        upsert: vi.fn()
       }
     });
 
@@ -87,7 +95,8 @@ describe("product knowledge repository", () => {
       productKnowledgeDocument: {
         create: vi.fn(),
         findMany: vi.fn(),
-        update
+        update,
+        upsert: vi.fn()
       }
     });
 

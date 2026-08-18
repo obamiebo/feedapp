@@ -4,7 +4,7 @@ import type {
   DocumentServiceSearchResponse,
   ProductKnowledgeDocumentType as DocumentServiceDocumentType
 } from "@/lib/document-service";
-import { createConfiguredDocumentServiceClient } from "@/lib/document-service";
+import { createConfiguredDocumentServiceClient, DocumentServiceRequestError } from "@/lib/document-service";
 import { canManageProductKnowledge, canSearchProductKnowledge } from "@/lib/access-control";
 import type { IntegrationRepository } from "@/repositories/integrations";
 import { createPrismaIntegrationRepository } from "@/repositories/integrations";
@@ -196,7 +196,14 @@ export function createProductKnowledgeService(
         throw new Error("Current user cannot manage product knowledge for this source");
       }
 
-      await getDocumentService().deleteDocument(input.documentServiceId);
+      try {
+        await getDocumentService().deleteDocument(input.documentServiceId);
+      } catch (error) {
+        if (!(error instanceof DocumentServiceRequestError) || error.status !== 404) {
+          throw error;
+        }
+      }
+
       return productKnowledge.markDeleted(input.documentServiceId);
     }
   };

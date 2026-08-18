@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createConfiguredDocumentServiceClient, DocumentServiceClient } from "@/lib/document-service";
+import { createConfiguredDocumentServiceClient, DocumentServiceClient, DocumentServiceRequestError } from "@/lib/document-service";
 
 const originalEnv = process.env;
 
@@ -83,11 +83,18 @@ describe("DocumentServiceClient", () => {
       fetchImpl
     });
 
-    await expect(
-      client.searchProductKnowledge({
+    try {
+      await client.searchProductKnowledge({
         query: "checkout failure",
         productSourceKey: "commerce-platform"
-      })
-    ).rejects.toThrow("Document service request failed: Access denied");
+      });
+      throw new Error("Expected request to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentServiceRequestError);
+      expect(error).toMatchObject({
+        message: "Document service request failed: Access denied",
+        status: 500
+      });
+    }
   });
 });
